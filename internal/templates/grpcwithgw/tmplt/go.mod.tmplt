@@ -1,0 +1,20 @@
+module {{  .ModuleName  }}
+
+go 1.12
+
+require (
+	github.com/golang/protobuf v1.3.1
+	github.com/grpc-ecosystem/grpc-gateway v1.8.5
+	github.com/cnative/serviebuilder {{ .ServiceBuilderVersion }}
+	github.com/pkg/errors v0.8.1
+	go.opencensus.io v0.19.2
+	go.uber.org/atomic v1.3.2 // indirect
+	go.uber.org/multierr v1.1.0 // indirect
+	go.uber.org/zap v1.9.1
+	golang.org/x/crypto v0.0.0-20190320223903-b7391e95e576
+	golang.org/x/net v0.0.0-20190322120337-addf6b3196f6
+	google.golang.org/genproto v0.0.0-20190321212433-e79c0c59cdb5
+	google.golang.org/grpc v1.19.1
+	gopkg.in/urfave/cli.v1 v1.20.0
+	gopkg.in/yaml.v2 v2.2.2 // indirect
+)

@@ -1,0 +1,51 @@
+export VERSION    ?= dev
+export GIT_COMMIT ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || echo unknown)
+export LD_FLAGS = -X "main.gitCommit=$(GIT_COMMIT)" -X "main.version=$(VERSION)"
+
+export GOBIN = $(abspath .)/.tools/bin
+export PATH := $(GOBIN):$(PATH)
+export GO111MODULE=on
+export CGO_ENABLED=0
+
+export V = 0
+export Q = $(if $(filter 1,$V),,@)
+export M = $(shell printf "\033[34;1m▶\033[0m")
+
+help:
+	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+
+deps:
+	go get -d -v ./...
+
+install-deptools: deps ## install dependent go tools
+	$Q sh ./scripts/download_protoc.sh  && \
+	   go install golang.org/x/lint/golint/...  && \
+	   go install github.com/golang/protobuf/protoc-gen-go && \
+	   go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway && \
+	   go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger \
+	; $(info $(M) installing protoc, golint, protoc-gen-go, protoc-gen-grpc-gateway, protoc-gen-swagger)
+
+gen: 
+	$Q go generate ./pkg/api ./pkg/state ; $(info $(M) generating grpc api server handler, gateway, swagger and metrics & trace store …)
+
+fmt: ; $(info $(M) formatting …) @ ## run go fmt on all source files
+	@go fmt ./...
+
+vet: ; $(info $(M) vetting …) @ ## run go vet on all source files
+	@go vet ./...
+
+lint: ; $(info $(M) linting …) @ ## run golint
+	@golint ./...
+
+build: gen fmt vet lint  ## build service
+	$Q go build -ldflags '$(LD_FLAGS)' -o bin/{{ .Name  }} ./ ; $(info $(M) building executable …)
+
+build-image: ## build container image using docker
+	$Q docker build --build-arg 'LD_FLAGS=$(LD_FLAGS)' -t {{ .ImageName }}:$(VERSION) . ; $(info $(M) building docker image …)
+
+push-image: build-image ## build and publish container image using docker
+	$Q docker push {{ .ImageName }}:$(VERSION) ; $(info $(M) pushing docker image `…)
+
+clean: ; $(info $(M) cleaning …)	@ ## cleanup everything
+	@rm -rf bin
+	@rm -rf test/tests.* test/coverage.*

@@ -1,0 +1,73 @@
+# {{ .Name  }}
+
+{{ .Name  }} description
+
+{{ .Name  }} is a service in based on [`servicebuilder`](https://github.com/cnative/servicebuilder/) that
+
+- enables fast development of [gRPC](https://grpc.io/) based micro services
+- exposes the gRPC services as REST / Json via [grpc gateway](https://github.com/grpc-ecosystem/grpc-gateway) interface
+- exposes metrics endpoint, which [Prometheus](https://prometheus.io/) could scrape from
+- support tracing and metrics instrumentation using [OpenCensus](https://opencensus.io/)
+- exposes health check end points
+- defines state management interface.
+- provides standard CLI 
+- build [Docker](https://www.docker.com/) container image
+- enables [Kubernetes](https://kubernetes.io/)
+- enables consistent logging
+
+## Getting Started
+
+### Building
+
+#### Pre-Req
+
+- [Go 1.11](https://golang.org/dl/)
+- [Docker](https://store.docker.com/search?q=&type=edition&offering=community)
+- *[Kubernetes](https://docs.docker.com/docker-for-mac/kubernetes/)* - `Optional` If you want to deploy
+
+#### Install Dependencies
+
+`make install-deptools` will install following dependencies
+
+- [dep](https://golang.github.io/dep/)
+- [Protocol Buffers 3.6.1](https://github.com/protocolbuffers/protobuf) along with following plugins
+    -- [protoc-gen-go](https://github.com/golang/protobuf/tree/master/protoc-gen-go)
+    -- [protoc-gen-grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway/tree/master/protoc-gen-grpc-gateway)
+    -- [protoc-gen-swagger](https://github.com/grpc-ecosystem/grpc-gateway/tree/master/protoc-gen-swagger)
+
+`Note:` the `protoc` compiler and the plugins are downloaded and saved to `.protoc` folder under the project's root directory
+
+#### Binary
+
+`make clean bulid`
+
+#### Docker Image
+
+`make docker-build`
+
+### Development workflow
+
+- Add your project specific flags / command line arguments in `cmd/{{ .Name  }}/server.go`
+- Define your protobuf messaages and grpc services in `{{ .Name  }}.proto` file.
+- Run `make gen`. This will generate requred structs and service methods from the proto file.
+- Implement the business logic for your service methods in `pkg/server` package
+- Run `make build`. This will build a binary `{{ .Name  }}` under `./bin` folder
+- Often times the service needs to interact with some store. For example a sql store or a nosql store like mongo or bolddb. A Store interface defines all the persistence/repo methods and you there could be multiple implementations for the persistence layer. The store interface methods and various implmentations are defined in `pkg/state` package.
+
+### Running
+
+#### on localhost
+
+After a successful build using make you can
+
+`./bin/{{ .Name  }}`
+
+#### on localhost using docker
+
+Similarly you can the docker image after
+
+`docker run --rm {{ .Name  }}:dev`
+
+#### on a kubernetes cluster
+
+`todo`

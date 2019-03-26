@@ -1,0 +1,32 @@
+#!/bin/sh
+set -x
+
+DIR="`dirname \"$0\"`"
+ROOTDIR="`( cd \"$DIR/../\" && pwd )`"  # normalized project root dir
+
+arch=`uname -m`
+os=`uname -s`
+
+case "${os}" in
+  Darwin*)
+        os=osx
+        ;; 
+  Linux*) 
+        os=linux
+        ;;
+  *)  
+        echo "unsupported: $OSTYPE" 
+        exit 1
+        ;;
+esac
+
+protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/{{ .ProtocVersion }}/protoc-{{ Trim .ProtocVersion "v" }}-${os}-${arch}.zip
+echo download protoc ... $protoc_url
+
+rm -rf ${ROOTDIR}/.tools
+mkdir -p ${ROOTDIR}/.tools
+curl -sLJO $protoc_url
+
+unzip -d ${ROOTDIR}/.tools ${asset}
+
+rm -rf ${asset}

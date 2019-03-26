@@ -1,0 +1,17 @@
+dist: trusty
+sudo: required
+language: go
+go: '1.12.x'
+services:
+  - docker
+env:
+  - GO111MODULE=on
+script: make clean build
+deploy:
+  - provider: script
+    skip_cleanup: true
+    script: curl -sL https://git.io/goreleaser | bash -s -- --rm-dist
+    on:
+      tags: true
+notifications:
+  email: false

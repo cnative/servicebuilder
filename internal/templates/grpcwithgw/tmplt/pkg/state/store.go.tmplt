@@ -1,0 +1,19 @@
+package state
+
+import (
+	"context"
+	"io"
+
+	"{{  .ModuleName  }}/pkg/health"
+)
+
+//go:generate servicebuilder iwrap -z -f ./store.go -i Store --output-dir ./ -p state -m "{{ .ModuleName }}/pkg/log"
+
+// Store provides access to data that is required for .
+type Store interface {
+	Initialize(ctx context.Context) error
+	io.Closer
+	health.Probe
+
+	Echo(ctx context.Context, msg string) (string, error)
+}

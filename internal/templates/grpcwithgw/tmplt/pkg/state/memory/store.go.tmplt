@@ -1,0 +1,91 @@
+package memory
+
+import (
+	"context"
+	"fmt"
+
+	"{{  .ModuleName  }}/pkg/log"
+	"{{  .ModuleName  }}/pkg/state"
+)
+
+type (
+	inMemoryStore struct {
+		db      map[string]interface{}
+		logger  *log.Logger
+		trace   bool
+		metrics bool
+	}
+
+	// Option interface for store
+	Option interface {
+		apply(*inMemoryStore)
+	}
+
+	optionFunc func(*inMemoryStore)
+)
+
+func (f optionFunc) apply(s *inMemoryStore) {
+	f(s)
+}
+
+//NewStore returns an in memory store
+func NewStore(otions ...Option) (store state.Store, err error) {
+	s := &inMemoryStore{metrics: true, trace: false}
+	store = s
+
+	for _, opt := range otions {
+		opt.apply(s)
+	}
+	if s.logger == nil {
+		s.logger, err = log.NewNop()
+	}
+
+	if s.metrics {
+		store = state.StoreWithMetrics(s, s.logger)
+	}
+
+	if s.trace {
+		store = state.StoreWithTrace(store, s.logger)
+	}
+
+	return store, err
+}
+
+func (i *inMemoryStore) Initialize(ctx context.Context) error {
+	i.logger.Info("in-memory store initialized")
+	return nil
+}
+
+func (i *inMemoryStore) Close() error {
+	return nil
+}
+
+func (i *inMemoryStore) Healthy() error {
+	i.logger.Info("store health check here")
+	return nil
+}
+
+func (i *inMemoryStore) Echo(ctx context.Context, msg string) (string, error) {
+	return fmt.Sprintf("from memory %s", msg), nil
+}
+
+// Logger configures logger for health service
+func Logger(l *log.Logger) Option {
+	return optionFunc(func(i *inMemoryStore) {
+		i.logger = l.NamedLogger("memstore")
+	})
+}
+
+// Trace option that enables trace
+func Trace(enable bool) Option {
+	return optionFunc(func(i *inMemoryStore) {
+		i.trace = enable
+	})
+}
+
+// Metrics option that enables metrics
+func Metrics(enable bool) Option {
+	return optionFunc(func(i *inMemoryStore) {
+		i.metrics = enable
+	})
+}

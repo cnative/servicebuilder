@@ -1,0 +1,3 @@
+package api
+
+//go:generate /bin/sh ./generate-protobuf.sh

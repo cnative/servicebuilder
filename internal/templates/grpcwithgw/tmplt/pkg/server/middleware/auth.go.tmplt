@@ -1,0 +1,32 @@
+package middleware
+
+import (
+	"fmt"
+
+	"go.opencensus.io/trace"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+)
+
+func auth(ctx context.Context) (context.Context, error) {
+	fmt.Printf("	Auth - Handler  %v+ \n\n\n", ctx)
+
+	s := trace.FromContext(ctx)
+	if s != nil {
+		fmt.Printf("			Auth Trace SPAN %v \n\n\n", s.String())
+	}
+	return ctx, nil
+}
+
+// Auth returns a new unary server interceptors that performs per-request auth
+func Auth() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		fmt.Printf("Auth - Interceptor %T %v \n", info.Server, info.Server)
+		newCtx, err := auth(ctx)
+
+		if err != nil {
+			return nil, err
+		}
+		return handler(newCtx, req)
+	}
+}

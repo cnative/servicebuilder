@@ -1,0 +1,48 @@
+package api
+
+import (
+	"{{  .ModuleName  }}/pkg/log"
+	"{{  .ModuleName  }}/pkg/state"
+
+	"golang.org/x/net/context"
+)
+
+type (
+	{{ .Name  }}Service struct {
+		store  state.Store
+		logger *log.Logger
+	}
+)
+
+// Make sure that {{ .Name  }}Service implements the {{ .Name  }}pb.{{ .Name  }}Service interface.
+var _ {{ TitleCase .Name  }}Server = &{{ .Name  }}Service{}
+
+func (f optionFunc) apply(s *{{ .Name  }}Service) {
+	f(s)
+}
+
+// NewServiceHandler Creates a new {{ .Name  }}Service which implements {{ TitleCase .Name  }}Server
+func NewServiceHandler(otions ...Option) {{ TitleCase .Name  }}Server {
+	s := &{{ .Name  }}Service{}
+	for _, opt := range otions {
+		opt.apply(s)
+	}
+	if s.logger == nil {
+		s.logger, _ = log.NewNop()
+	}
+
+	return s
+}
+
+// EchoMessage is a example implementation and should be replaced with an actual
+// implementation.
+func (s *{{ .Name  }}Service) EchoMessage(ctx context.Context, req *Echo) (*Echo, error) {
+	// Change Me
+	s.logger.Info("EchoMessage called...")
+	resp, err := s.store.Echo(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Echo{Msg: resp}, nil
+}

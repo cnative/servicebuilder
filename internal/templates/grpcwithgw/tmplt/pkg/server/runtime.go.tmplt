@@ -1,0 +1,306 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"{{  .ModuleName  }}/pkg/api"
+	"{{  .ModuleName  }}/pkg/health"
+	"{{  .ModuleName  }}/pkg/log"
+	"{{  .ModuleName  }}/pkg/server/middleware"
+	"{{  .ModuleName  }}/pkg/state"
+	
+	grpc_runtime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/pkg/errors"
+	"go.opencensus.io/exporter/jaeger"
+	"go.opencensus.io/exporter/prometheus"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/zpages"
+	"google.golang.org/grpc"
+)
+
+// gateway server views
+var (
+	gwRequestByMethod = &view.View{
+		Name:        "gw/req_count_by_method",
+		Description: "Gateway Server request count by HTTP method",
+		TagKeys:     []tag.Key{ochttp.Method, ochttp.Path},
+		Measure:     ochttp.ServerRequestCount,
+		Aggregation: view.Count(),
+	}
+
+	gwResponseCountByStatusCode = &view.View{
+		Name:        "gw/resp_count_by_status_code",
+		Description: "Server response count by status code",
+		TagKeys:     []tag.Key{ochttp.Method, ochttp.Path, ochttp.StatusCode},
+		Measure:     ochttp.ServerLatency,
+		Aggregation: view.Count(),
+	}
+
+	gwServerLatency = &view.View{
+		Name:        "gw/latency",
+		Description: "Latency distribution of HTTP requests",
+		TagKeys:     []tag.Key{ochttp.Method, ochttp.Path, ochttp.StatusCode},
+		Measure:     ochttp.ServerLatency,
+		Aggregation: ochttp.DefaultLatencyDistribution,
+	}
+
+	defaultGatewayViews = []*view.View{
+		gwRequestByMethod,
+		gwServerLatency,
+		gwResponseCountByStatusCode,
+	}
+)
+
+type (
+	runtime struct {
+		logger         *log.Logger
+		store          state.Store
+		grpcServer     *grpc.Server
+		gwServer       *http.Server
+		metricsHandler *http.ServeMux
+		healthServer   health.Service
+
+		port   uint // GRPC server port
+		gwPort uint // GW server port
+		hPort  uint // Health server port
+		mPort  uint // metrics server port
+
+		gwEnabled      bool
+		traceEnabled   bool
+		traceEndpoint  string
+		traceNamespace string
+		traceBackend   string
+	}
+
+	//Runtime interface defines server operations
+	Runtime interface {
+		Start(context.Context) (chan error, error)
+		Stop(context.Context)
+	}
+)
+
+func (f optionFunc) apply(r *runtime) {
+	f(r)
+}
+
+// NewRuntime returns a new Runtime
+func NewRuntime(otions ...Option) (Runtime, error) {
+	// setup defaults
+	r := &runtime{
+		port:   19990,
+		gwPort: 19991,
+		hPort:  19992,
+		mPort:  9101,
+	}
+	for _, opt := range otions {
+		opt.apply(r)
+	}
+	if r.logger == nil {
+		r.logger, _ = log.NewNop()
+	}
+
+	r.metricsHandler = http.NewServeMux()
+	r.registerPromMetricsExporter(r.metricsHandler, "{{ .Name  }}_rt")
+	r.registerTraceExporter()
+
+	r.healthServer = health.New(health.BindPort(r.hPort), health.Logger(r.logger))
+	r.healthServer.RegisterProbe("store", r.store)
+
+	r.logger.Debug("creating server")
+	r.grpcServer = r.newGRPCServerWithMetrics()
+	apiHandler := api.NewServiceHandler(
+		api.Store(r.store),
+		api.Logger(r.logger),
+	)
+	api.Register{{ TitleCase .Name  }}Server(r.grpcServer, apiHandler)
+
+	if r.gwEnabled {
+		gwServer, err := r.newGatewayServer(context.Background())
+		if err != nil {
+			r.logger.Errorf("Unable to register grpc gateway server - %v", err)
+			return nil, err
+		}
+		r.gwServer = gwServer
+	}
+
+	return r, nil
+}
+
+// Start server runtime
+func (r *runtime) Start(ctx context.Context) (chan error, error) {
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", r.port))
+	if err != nil {
+		r.logger.Errorf("Failed to listen -%v ", err)
+		return nil, err
+	}
+
+	errc := make(chan error, 5)
+
+	// Shutdown on SIGINT, SIGTERM
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("%s", <-c)
+	}()
+
+	// Start gRPC server
+	go func() {
+		r.logger.Infow("starting server", "port", r.port)
+		err := r.grpcServer.Serve(lis)
+		errc <- errors.Wrap(err, "server returned an error")
+	}()
+
+	// Start health server
+	go func() {
+		r.logger.Infow("starting health service", "port", r.hPort)
+		err := r.healthServer.Start()
+		errc <- errors.Wrap(err, "health service returned an error")
+	}()
+
+	// Start metrics server
+	go func() {
+		r.logger.Infow("starting metrics server", "port", r.mPort)
+		err := http.ListenAndServe(fmt.Sprintf(":%d", r.mPort), r.metricsHandler)
+		errc <- errors.Wrap(err, "metrics service returned an error")
+	}()
+
+	if r.gwEnabled {
+		// Start Gateway server
+		go func() {
+			r.logger.Infow("starting gateway server", "gw-port", r.gwPort)
+			err := r.gwServer.ListenAndServe()
+			errc <- errors.Wrap(err, "gateway returned an error")
+		}()
+	}
+	return errc, nil
+
+}
+
+// Stop server runtime
+func (r *runtime) Stop(ctx context.Context) {
+
+	r.logger.Infof("Shutting down..")
+
+	// Gracefully shutdown the health server
+	r.healthServer.Stop(context.Background())
+
+	// Gracefully shutdown the Gateway server
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if r.gwEnabled {
+		err := r.gwServer.Shutdown(ctx)
+		if err != nil {
+			r.logger.Errorf("An error happened while shutting down -%v", err)
+		}
+	}
+
+	// Gracefully shutdown the gRPC server
+	r.grpcServer.GracefulStop()
+}
+
+func (r *runtime) newGRPCServerWithMetrics() *grpc.Server {
+	r.logger.Debug("creating new gRPC server with default server metrics views")
+
+	if err := view.Register(state.DefaultStoreViews...); err != nil {
+		r.logger.Fatalf("Failed to register ocgrpc server views: %v", err)
+	}
+	s := grpc.NewServer(
+		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
+		middleware.WithUnaryInterceptors(),
+	)
+
+	return s
+}
+
+// grpc-gateway
+func (r *runtime) newGatewayServer(ctx context.Context) (*http.Server, error) {
+
+	mux := grpc_runtime.NewServeMux(grpc_runtime.WithMarshalerOption(grpc_runtime.MIMEWildcard, &grpc_runtime.JSONPb{EmitDefaults: true}))
+
+	opts := []grpc.DialOption{
+		grpc.WithInsecure(),
+		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
+	}
+
+	if err := api.Register{{ TitleCase .Name  }}HandlerFromEndpoint(ctx, mux, fmt.Sprintf(":%d", r.port), opts); err != nil {
+		return nil, err
+	}
+
+	if err := view.Register(defaultGatewayViews...); err != nil {
+		r.logger.Fatalf("Failed to register ochttp server views: %v", err)
+	}
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%d", r.gwPort),
+		Handler: &ochttp.Handler{Handler: mux},
+	}, nil
+}
+
+// register trace exporter
+func (r *runtime) registerTraceExporter() {
+
+	if !r.traceEnabled {
+		r.logger.Debugf("tracing not enabled")
+		return
+	}
+
+	var exporter trace.Exporter
+	var err error
+	switch r.traceBackend {
+	case "jaeger":
+		// Register the Jaeger exporter to be able to retrieve
+		// the collected spans.
+		exporter, err = jaeger.NewExporter(jaeger.Options{
+			CollectorEndpoint: r.traceEndpoint,
+			Process: jaeger.Process{
+				ServiceName: r.traceNamespace,
+			},
+		})
+	default:
+		r.logger.Warnf("Unsupported tracing backend %s", r.traceBackend)
+		return
+	}
+
+	if err != nil {
+		r.logger.Fatalf("Failed to create an Jaeger Trace exporter %v", err)
+		return
+	}
+
+	trace.RegisterExporter(exporter)
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+}
+
+// registers prometheus metrics exporter
+func (r *runtime) registerPromMetricsExporter(mux *http.ServeMux, serviceName string) {
+
+	if err := view.Register(ocgrpc.DefaultServerViews...); err != nil {
+		r.logger.Fatalf("Failed to register ocgrpc server views: %v", err)
+	}
+
+	// Create the Prometheus exporter.
+	pe, err := prometheus.NewExporter(prometheus.Options{
+		Namespace: serviceName,
+	})
+	if err != nil {
+		r.logger.Fatalf("Failed to create prometheus metrics exporter: %v", err)
+	}
+
+	view.RegisterExporter(pe)
+	r.logger.Debug("registering prometheus exporter with http server mux")
+
+	mux.Handle("/metrics", pe)
+	zpages.Handle(mux, "/")
+
+}

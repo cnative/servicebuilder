@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "api";
+
+import "google/api/annotations.proto";
+
+service {{ .Name  }} {
+  rpc EchoMessage(Echo) returns (Echo) {
+    option (google.api.http) = {
+      post: "/api/v1/echo"
+      body: "*"
+    };
+  }
+}
+
+message Echo {
+  string msg = 1;
+}
