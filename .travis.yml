@@ -14,5 +14,6 @@ deploy:
     script: curl -sL https://git.io/goreleaser | bash -s -- --rm-dist
     on:
       tags: true
+      condition: $TRAVIS_OS_NAME = linux
 notifications:
   email: false
