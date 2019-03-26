@@ -9,7 +9,7 @@ export CGO_ENABLED=0
 all: install-deptools clean test build
 
 deps:
-	go get -d -v github.com/cnative/servicebuilder/...
+	go get -d -v ./...
 
 install-deptools: deps
 	@mkdir -p ${GOBIN}

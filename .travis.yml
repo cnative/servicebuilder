@@ -7,7 +7,7 @@ services:
   - docker
 env:
   - GO111MODULE=on
-script: make clean build
+script: make install-deptools clean build
 deploy:
   - provider: script
     skip_cleanup: true
