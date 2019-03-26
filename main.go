@@ -53,7 +53,7 @@ func init() {
 }
 
 // preRun
-func preRun(cmd *cobra.Command, args []string) error {
+func preRun(c *cobra.Command, args []string) error {
 	log.SetLevel(log.InfoLevel)
 	log.SetFormatter(&term.TextFormatter{})
 	if debug {
@@ -63,9 +63,6 @@ func preRun(cmd *cobra.Command, args []string) error {
 	if silent {
 		log.SetLevel(log.FatalLevel)
 	}
-
-	fmt.Println()
-	log.WithField("version", version).Infof("sevicebuilder")
 
 	return nil
 }

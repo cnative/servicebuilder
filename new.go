@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -126,6 +127,8 @@ func scafoldNewService(c *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	fmt.Println()
+	log.WithField("version", version).Infof("sevicebuilder")
 	log.WithFields(log.Fields{
 		"name":            o.Name,
 		"module-name":     o.ModuleName,

@@ -35,11 +35,5 @@ test: fmt vet
 	go test ./... -coverprofile cover.out
 
 clean:
-	@rm -rf bin
+	@rm -rf bin dist
 	@rm -rf test/tests.* test/coverage.*
-
-build-image: ## Build docker image
-	docker build --build-arg 'LD_FLAGS=$(LD_FLAGS)' -t cnative/servicebuilder:$(VERSION) .
-
-push-image: build-image ## Build and publish docker image
-	$Q docker push cnative/$(PACKAGE):$(VERSION); $(info $(M) pushing docker image…)
