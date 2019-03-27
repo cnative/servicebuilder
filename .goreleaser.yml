@@ -33,3 +33,12 @@ archive:
   format_overrides:
   - goos: windows
     format: zip
+brew:
+  github:
+    owner: cnative
+    name: homebrew-tap
+  folder: Formula
+  homepage:  https://cnative.dev
+  description: A gRPC based Micro Service scaffolding in GoLang with HTTP/JSON gRPC gateway
+  test: |
+    system "#{bin}/servicebuilder version"

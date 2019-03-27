@@ -1,10 +1,11 @@
-export VERSION    ?= dev
-export GIT_COMMIT ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || echo unknown)
-export LD_FLAGS = -X "main.gitCommit=$(GIT_COMMIT)" -X "main.version=$(VERSION)" -X "main.compiled=$(shell date +%s)"
-export GOBIN = $(abspath .)/.tools
-export PATH := $(GOBIN):$(PATH)
 export GO111MODULE=on
 export CGO_ENABLED=0
+export GOBIN = $(abspath .)/.tools
+export PATH := $(GOBIN):$(PATH)
+
+export VERSION    ?= dev
+export GIT_COMMIT ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || echo unknown)
+export LD_FLAGS = -X "main.commit=$(GIT_COMMIT)" -X "main.version=$(VERSION)" -X "main.date=$(shell date)"
 
 all: install-deptools clean test build
 
