@@ -1,0 +1,4 @@
+apiVersion: v1
+description: A Helm chart for [[ .Name ]] 
+name: [[ .Name ]]
+version: 0.0.1

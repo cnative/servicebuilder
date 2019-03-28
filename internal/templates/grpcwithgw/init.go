@@ -47,9 +47,14 @@ func (g *grpcServiceTemplateProvider) initialize() error {
 		if err != nil {
 			return err
 		}
-		s := string(t.bytes)
 
-		pt, err := template.New(k).Funcs(funcs).Parse(s)
+		s := string(t.bytes)
+		var pt *template.Template
+		if strings.HasPrefix(k, "helm") {
+			pt, err = template.New(k).Funcs(funcs).Delims("[[", "]]").Parse(s)
+		} else {
+			pt, err = template.New(k).Funcs(funcs).Parse(s)
+		}
 		if err != nil {
 			return err
 		}

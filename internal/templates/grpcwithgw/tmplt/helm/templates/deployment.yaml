@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "[[ .Name ]].fullname" . }}
+  labels:
+    app: {{ template "[[ .Name ]].name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "[[ .Name ]].name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "[[ .Name ]].name" . }}
+        release: {{ .Release.Name }}
+    spec:
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+      containers:
+        - name: server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [
+            "server"
+          ]
+          ports:
+            - name: server
+              containerPort: {{ .Values.service.serverPort }}
+              protocol: TCP
+            - name: gateway
+              containerPort: {{ .Values.service.gatewayPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: {{ .Values.service.healthPort }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.service.healthPort }}
+          securityContext:
+            readOnlyRootFilesystem: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
