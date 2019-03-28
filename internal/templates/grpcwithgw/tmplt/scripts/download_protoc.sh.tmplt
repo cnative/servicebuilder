@@ -22,7 +22,7 @@ esac
 
 asset=protoc-{{ Trim .ProtocVersion "v" }}-${os}-${arch}.zip
 protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/{{ .ProtocVersion }}/${asset}
-echo Download protoc ... $protoc_url
+echo "Download  $protoc_url"
 
 rm -rf ${ROOTDIR}/.tools
 mkdir -p ${ROOTDIR}/.tools

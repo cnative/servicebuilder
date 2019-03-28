@@ -95,7 +95,7 @@ func init() {
 	iwrapCmd.Flags().StringP("interface-name", "i", "", "name of the interface to use")
 	iwrapCmd.Flags().StringP("package-name", "p", "", "package name to use")
 	iwrapCmd.Flags().StringP("template-path", "", "", "path to the template")
-	iwrapCmd.Flags().StringSliceP("templates", "t", []string{"tracing", "metrics"}, "name of the templates to use. If template-path is specifed templates will be ignored. If both template-path and templates are not specified then 'metrics' & 'tracing' will be applied")
+	iwrapCmd.Flags().StringSliceP("templates", "t", []string{"tracing", "metrics"}, "name of the templates to use. If template-path is specified templates will be ignored. If both template-path and templates are not specified then 'metrics' & 'tracing' will be applied")
 	iwrapCmd.Flags().BoolP("format", "z", true, "format output using gofmt")
 	iwrapCmd.Flags().StringP("output-dir", "o", "-", "path to the output file (use - for stdout)")
 	iwrapCmd.Flags().StringSliceP("ignore", "g", []string{}, "ignore the following methods (separate with commas)")

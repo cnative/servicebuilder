@@ -1,7 +1,8 @@
 # GO Micro Service Builder - project bootstrapping tool
 
-[![Release](https://img.shields.io/github/release/cnative/servicebuilder.svg?style=for-the-badge)](https://github.com/cnative/servicebuilder/releases/latest)
-[![Travis](https://img.shields.io/travis/cnative/servicebuilder/master.svg?style=for-the-badge)](https://travis-ci.com/cnative/servicebuilder.svg?branch=master)
+[![Release](https://img.shields.io/github/release/cnative/servicebuilder.svg)](https://github.com/cnative/servicebuilder/releases/latest)
+[![Travis](https://travis-ci.com/cnative/servicebuilder.svg?branch=master)](https://travis-ci.com/cnative/servicebuilder.svg?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/helm/helm)](https://goreportcard.com/report/github.com/helm/helm)
 
 Serivce Builder is a GO tool that generates scafolding / boilerplate code for building a cloud native service
 
