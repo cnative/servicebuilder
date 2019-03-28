@@ -1,5 +1,5 @@
 #!/bin/sh
-set -x
+set -e
 
 DIR="`dirname \"$0\"`"
 ROOTDIR="`( cd \"$DIR/../\" && pwd )`"  # normalized project root dir
@@ -20,8 +20,9 @@ case "${os}" in
         ;;
 esac
 
-protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/{{ .ProtocVersion }}/protoc-{{ Trim .ProtocVersion "v" }}-${os}-${arch}.zip
-echo download protoc ... $protoc_url
+asset=protoc-{{ Trim .ProtocVersion "v" }}-${os}-${arch}.zip
+protoc_url=https://github.com/protocolbuffers/protobuf/releases/download/{{ .ProtocVersion }}/${asset}
+echo Download protoc ... $protoc_url
 
 rm -rf ${ROOTDIR}/.tools
 mkdir -p ${ROOTDIR}/.tools

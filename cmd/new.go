@@ -114,9 +114,18 @@ func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
 		ImageName:             imgn,
 		Description:           description,
 		DstDir:                p,
-		ServiceBuilderVersion: version,
+		ServiceBuilderVersion: getServiceBuilderVersion(),
 		ProtocVersion:         protocVersion,
 	}, nil
+}
+
+func getServiceBuilderVersion() string {
+
+	if version == "dev" || version == "unknown" {
+		return "latest"
+	}
+
+	return fmt.Sprintf("v%s", version)
 }
 
 func scafoldNewService(c *cobra.Command, args []string) {

@@ -15,7 +15,7 @@ import (
 	"{{  .ModuleName  }}/pkg/log"
 	"{{  .ModuleName  }}/pkg/server/middleware"
 	"{{  .ModuleName  }}/pkg/state"
-	
+
 	grpc_runtime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"go.opencensus.io/exporter/jaeger"

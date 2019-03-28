@@ -20,6 +20,7 @@ deps:
 install-deptools: deps ## install dependent go tools
 	$Q sh ./scripts/download_protoc.sh  && \
 	   go install golang.org/x/lint/golint/...  && \
+	   go install github.com/cnative/servicebuilder && \
 	   go install github.com/golang/protobuf/protoc-gen-go && \
 	   go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway && \
 	   go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger \
