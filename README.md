@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/release/cnative/servicebuilder.svg)](https://github.com/cnative/servicebuilder/releases/latest)
 [![Travis](https://travis-ci.com/cnative/servicebuilder.svg?branch=master)](https://travis-ci.com/cnative/servicebuilder.svg?branch=master)
-[![Go Report Card](https://goreportcard.com/badge/github.com/helm/helm)](https://goreportcard.com/report/github.com/helm/helm)
+[![Go Report Card](https://goreportcard.com/badge/github.com/cnative/servicebuilder)](https://goreportcard.com/report/github.com/cnative/servicebuilder)
 
 Serivce Builder is a GO tool that generates scafolding / boilerplate code for building a cloud native service
 
