@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Name }}
+  labels:
+    app: {{ .Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Name }}
+    spec:
+      containers:
+      - name: server
+        image: {{ .ImageName }}:dev
+        args: [
+          "server"
+        ]
+        ports:
+        - name: server
+          containerPort: 19990
+          protocol: TCP
+        - name: gateway
+          containerPort: 19991
+          protocol: TCP
+        - name: health
+          containerPort: 19992
+          protocol: TCP
+        - name: metrics
+          containerPort: 9101
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 19992
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 19992

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 	"text/template"
 
 	"github.com/fatih/color"
@@ -13,14 +14,32 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	// K8SManifest used to generate K8S Manifest that is compatible with kustomize
+	K8SManifest DeploymentType = iota - 1
+
+	// HemlChart Deployment artifact
+	HemlChart
+
+	// UnknownDeployemntType is invalid deployment type
+	UnknownDeployemntType
+)
+
 type (
+
+	// DeploymentType indicates artifacts to use for deployment
+	DeploymentType int8
+
 	// Options used for Service builder
 	Options struct {
-		Name        string
-		ModuleName  string
-		ImageName   string
-		Description string
-		DstDir      string
+		Name            string
+		ModuleName      string
+		ImageName       string
+		Description     string
+		DstDir          string
+		HTTPRoutePrefix string
+		DeploymentType  DeploymentType
+		DomainName      string
 
 		ProtocVersion         string
 		ServiceBuilderVersion string
@@ -111,4 +130,30 @@ func (g *serviceBuilder) Generate() error {
 	fmt.Println()
 
 	return nil
+}
+
+func (d DeploymentType) String() string {
+
+	switch d {
+	case K8SManifest:
+		return "k8s"
+	case HemlChart:
+		return "helm"
+	default:
+		return "unknown"
+	}
+}
+
+// ValueOf returns Typed DeploymentType
+func ValueOf(d string) (DeploymentType, error) {
+
+	ud := strings.ToLower(d)
+	switch ud {
+	case "k8s":
+		return K8SManifest, nil
+	case "helm":
+		return HemlChart, nil
+	default:
+		return UnknownDeployemntType, errors.New("unknown deployment type")
+	}
 }

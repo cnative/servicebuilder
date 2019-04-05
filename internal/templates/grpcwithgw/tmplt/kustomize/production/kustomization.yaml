@@ -1,0 +1,12 @@
+bases:
+- ./../base
+
+namePrefix: prod-
+
+patchesJson6902:
+- target:
+    group: extensions
+    version: v1beta1
+    kind: Ingress
+    name: {{ .Name }}
+  path: ingress_patch.yaml

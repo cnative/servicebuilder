@@ -1,0 +1,15 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    app: {{ .Name }}
+  name: {{ .Name }}
+spec:
+  rules:
+  - host: localhost
+    http:
+      paths:
+      - backend:
+          serviceName: {{ .Name }}
+          servicePort: 19991
+        path: {{ .HTTPRoutePrefix }}

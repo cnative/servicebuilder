@@ -49,23 +49,33 @@ func (g *grpcServiceTemplateProvider) initialize() error {
 		}
 
 		s := string(t.bytes)
-		var pt *template.Template
+		f := strings.TrimSuffix(k, ".tmplt")
+		tmplt := template.New(f).Funcs(funcs)
+
 		if strings.HasPrefix(k, "helm") {
-			pt, err = template.New(k).Funcs(funcs).Delims("[[", "]]").Parse(s)
-		} else {
-			pt, err = template.New(k).Funcs(funcs).Parse(s)
+			if g.options.DeploymentType != builder.HemlChart {
+				continue //ignore required deployment is not helm
+			}
+			f = fmt.Sprintf("deployment%s", strings.TrimPrefix(k, "helm"))
+			tmplt = template.New(f).Funcs(funcs).Delims("[[", "]]")
+		} else if strings.HasPrefix(k, "kustomize") {
+			if g.options.DeploymentType != builder.K8SManifest {
+				continue //ignore required deployment is not k8s
+			}
+			f = fmt.Sprintf("deployment%s", strings.TrimPrefix(k, "kustomize"))
 		}
+
+		pt, err := tmplt.Parse(s)
 		if err != nil {
 			return err
 		}
-		f := strings.TrimSuffix(k, ".tmplt")
 		if f == "proto" {
 			f = fmt.Sprintf("%s.proto", g.options.Name)
 		}
 		g.templates[f] = pt
 	}
 
-	log.Info("GRPC service with Gateway template provider initialized")
+	log.Info("gRPC service with Gateway template provider initialized")
 	return nil
 }
 

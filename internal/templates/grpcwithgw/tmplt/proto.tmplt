@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 service {{ .Name  }} {
   rpc EchoMessage(Echo) returns (Echo) {
     option (google.api.http) = {
-      post: "/api/v1/echo"
+      post: "{{ .HTTPRoutePrefix }}/echo"
       body: "*"
     };
   }

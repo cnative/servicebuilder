@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"{{  .ModuleName  }}/pkg/log"
 	"{{  .ModuleName  }}/pkg/state"
 
@@ -39,7 +40,7 @@ func NewServiceHandler(otions ...Option) {{ TitleCase .Name  }}Server {
 func (s *{{ .Name  }}Service) EchoMessage(ctx context.Context, req *Echo) (*Echo, error) {
 	// Change Me
 	s.logger.Info("EchoMessage called...")
-	resp, err := s.store.Echo(ctx, req.Msg)
+	resp, err := s.store.Echo(ctx, fmt.Sprintf("{{ .HTTPRoutePrefix  }} : %s", req.Msg))
 	if err != nil {
 		return nil, err
 	}

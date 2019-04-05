@@ -43,27 +43,30 @@ in this example 'accounts' is the service name`)
 	newCmd.Flags().StringP("description", "", "", "a short description of the service")
 	newCmd.Flags().StringP("image-name", "i", "", "container image name")
 	newCmd.Flags().StringP("protoc-version", "", "v3.7.0", "protocol buffer version to use")
+	newCmd.Flags().StringP("http-route-prefix", "r", "/api/v1", "http route prefix")
+	newCmd.Flags().StringP("deployment-type", "", "k8s", "deployment artifact to generate. Possible values [helm, k8s]")
+	newCmd.Flags().StringP("domain-name", "", "localhost", "domain name")
 	newCmd.Flags().StringP("path", "p", ".", "directory path where the project will be generated")
 }
 
 func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
-	m, err := c.Flags().GetString("module-name")
+	mname, err := c.Flags().GetString("module-name")
 	if err != nil {
 		return nil, err
 	}
 
-	m = strings.Trim(m, " ")
-	m = strings.Trim(m, "/")
+	mname = strings.TrimSpace(mname)
+	mname = strings.Trim(mname, "/")
 
-	if m == "" {
+	if mname == "" {
 		return nil, errors.New("module-name cannot be empty")
 	}
-	mparts := strings.Split(m, "/")
+	mparts := strings.Split(mname, "/")
 	sz := len(mparts)
 
 	// service name
-	n := mparts[sz-1]
-	n = strings.Trim(n, " ")
+	name := mparts[sz-1]
+	name = strings.TrimSpace(name)
 
 	description, err := c.Flags().GetString("description")
 	if err != nil {
@@ -88,6 +91,25 @@ func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
 		p = cdir
 	}
 
+	da, err := c.Flags().GetString("deployment-type")
+	if err != nil {
+		return nil, err
+	}
+	dtype, err := builder.ValueOf(da)
+	if err != nil {
+		return nil, err
+	}
+
+	routePrefix, err := c.Flags().GetString("http-route-prefix")
+	if err != nil {
+		return nil, err
+	}
+
+	domainName, err := c.Flags().GetString("domain-name")
+	if err != nil {
+		return nil, err
+	}
+
 	imgn, err := c.Flags().GetString("image-name")
 	if err != nil {
 		return nil, err
@@ -99,21 +121,24 @@ func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
 			imgr.WriteString(strings.Trim(mparts[sz-2], " "))
 			imgr.WriteString("/")
 		}
-		imgr.WriteString(n)
+		imgr.WriteString(name)
 		imgn = imgr.String()
 	}
 
-	dir := path.Join(p, m)
+	dir := path.Join(p, mname)
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		return nil, errors.Errorf("directory %s already exists", dir)
 	}
 
 	return &builder.Options{
-		Name:                  n,
-		ModuleName:            m,
+		Name:                  name,
+		ModuleName:            mname,
 		ImageName:             imgn,
 		Description:           description,
 		DstDir:                p,
+		DeploymentType:        dtype,
+		DomainName:            domainName,
+		HTTPRoutePrefix:       routePrefix,
 		ServiceBuilderVersion: getServiceBuilderVersion(),
 		ProtocVersion:         protocVersion,
 	}, nil
