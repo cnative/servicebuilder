@@ -1,10 +1,11 @@
 package api
 
 import (
-	"fmt"
 	"{{  .ModuleName  }}/pkg/log"
 	"{{  .ModuleName  }}/pkg/state"
 
+	empty "github.com/golang/protobuf/ptypes/empty"
+	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	"golang.org/x/net/context"
 )
 
@@ -15,15 +16,15 @@ type (
 	}
 )
 
-// Make sure that {{ .Name  }}Service implements the {{ .Name  }}pb.{{ .Name  }}Service interface.
-var _ {{ TitleCase .Name  }}Server = &{{ .Name  }}Service{}
+// Make sure that {{ LowerCase .ResourceName  }}Service implements the {{ .Name  }}pb.{{ .ResourceName  }}SvcServer interface
+var _ {{ .ResourceName  }}SvcServer = &{{ LowerCase .ResourceName  }}Service{}
 
-func (f optionFunc) apply(s *{{ .Name  }}Service) {
+func (f optionFunc) apply(s *{{ LowerCase .ResourceName  }}Service) {
 	f(s)
 }
 
-// NewServiceHandler Creates a new {{ .Name  }}Service which implements {{ TitleCase .Name  }}Server
-func NewServiceHandler(otions ...Option) {{ TitleCase .Name  }}Server {
+// NewServiceHandler Creates a new {{ .Name  }}Service which implements {{ .ResourceName  }}SvcServer
+func NewServiceHandler(otions ...Option) {{ .ResourceName  }}SvcServer {
 	s := &{{ .Name  }}Service{}
 	for _, opt := range otions {
 		opt.apply(s)
@@ -35,15 +36,106 @@ func NewServiceHandler(otions ...Option) {{ TitleCase .Name  }}Server {
 	return s
 }
 
-// EchoMessage is a example implementation and should be replaced with an actual
-// implementation.
-func (s *{{ .Name  }}Service) EchoMessage(ctx context.Context, req *Echo) (*Echo, error) {
-	// Change Me
-	s.logger.Info("EchoMessage called...")
-	resp, err := s.store.Echo(ctx, fmt.Sprintf("{{ .HTTPRoutePrefix  }} : %s", req.Msg))
+func (u *{{ LowerCase .ResourceName }}Service) Create{{ .ResourceName }}(ctx context.Context, req *Create{{ .ResourceName }}Request) (*{{ .ResourceName }}, error) {
+
+	response, err := u.store.Create{{ .ResourceName }}(ctx, state.{{ .ResourceName }}{
+		Name:        req.Name,
+		Description: req.Description,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &Echo{Msg: resp}, nil
+	return &{{ .ResourceName }}{
+		Id:          response.ID,
+		Name:        response.Name,
+		Description: response.Description,
+		CreatedBy:   response.CreatedBy,
+		UpdatedBy:   response.UpdatedBy,
+		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
+		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+	}, nil
+}
+
+func (u *{{ LowerCase .ResourceName }}Service) Get{{ .ResourceName }}(ctx context.Context, req *Get{{ .ResourceName }}Request) (*{{ .ResourceName }}, error) {
+
+	response, err := u.store.Get{{ .ResourceName }}(ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &{{ .ResourceName }}{
+		Id:          response.ID,
+		Name:        response.Name,
+		Description: response.Description,
+		CreatedBy:   response.CreatedBy,
+		UpdatedBy:   response.UpdatedBy,
+		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
+		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+	}, nil
+}
+
+func (u *{{ LowerCase .ResourceName }}Service) List{{ .ResourceName }}s(ctx context.Context, req *List{{ .ResourceName }}sRequest) (*List{{ .ResourceName }}sResponse, error) {
+
+	sortingOrder := state.ASC
+	if req.SortingOrder == List{{ .ResourceName }}sRequest_DESC {
+		sortingOrder = state.DESC
+	}
+
+	results, err := u.store.List{{ .ResourceName }}s(ctx, state.NewListRequest(
+		state.Page(req.Page), state.PageSize(req.PageSize),
+		state.SortBy(req.SortBy...), state.SortingOrder(sortingOrder),
+	))
+
+	if err != nil {
+		return nil, err
+	}
+
+	accs := []*{{ .ResourceName  }}{}
+	for _, r := range results {
+		a := &{{ .ResourceName  }}{
+			Id:          r.ID,
+			Name:        r.Name,
+			Description: r.Description,
+			CreatedBy:   r.CreatedBy,
+			UpdatedBy:   r.UpdatedBy,
+			CreatedAt:   &timestamp.Timestamp{Seconds: r.CreatedAt},
+			UpdatedAt:   &timestamp.Timestamp{Seconds: r.UpdatedAt},
+		}
+		accs = append(accs, a)
+	}
+
+	return &List{{ .ResourceName  }}sResponse{
+		{{ .ResourceName  }}s: accs,
+	}, nil
+}
+
+func (u *{{ LowerCase .ResourceName }}Service) Update{{ .ResourceName }}(ctx context.Context, req *Update{{ .ResourceName }}Request) (*{{ .ResourceName }}, error) {
+
+	response, err := u.store.Update{{ .ResourceName }}(ctx, state.{{ .ResourceName }}{
+		ID:          req.Id,
+		Description: req.Description,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &{{ .ResourceName }}{
+		Id:          response.ID,
+		Name:        response.Name,
+		Description: response.Description,
+		CreatedBy:   response.CreatedBy,
+		UpdatedBy:   response.UpdatedBy,
+		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
+		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+	}, nil
+}
+
+func (u *{{ LowerCase .ResourceName }}Service) Delete{{ .ResourceName }}(ctx context.Context, req *Delete{{ .ResourceName }}Request) (*empty.Empty, error) {
+
+	err := u.store.Delete{{ .ResourceName }}(ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &empty.Empty{}, nil
 }

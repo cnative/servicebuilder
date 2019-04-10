@@ -34,6 +34,7 @@ type (
 	Options struct {
 		Name            string
 		ModuleName      string
+		ResourceName    string
 		ImageName       string
 		Description     string
 		DstDir          string

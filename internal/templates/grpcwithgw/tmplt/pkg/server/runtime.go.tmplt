@@ -123,7 +123,7 @@ func NewRuntime(otions ...Option) (Runtime, error) {
 		api.Store(r.store),
 		api.Logger(r.logger),
 	)
-	api.Register{{ TitleCase .Name  }}Server(r.grpcServer, apiHandler)
+	api.Register{{ TitleCase .ResourceName  }}SvcServer(r.grpcServer, apiHandler)
 
 	if r.gwEnabled {
 		gwServer, err := r.newGatewayServer(context.Background())
@@ -191,7 +191,7 @@ func (r *runtime) Start(ctx context.Context) (chan error, error) {
 // Stop server runtime
 func (r *runtime) Stop(ctx context.Context) {
 
-	r.logger.Infof("Shutting down..")
+	r.logger.Infof("shutting down..")
 
 	// Gracefully shutdown the health server
 	r.healthServer.Stop(context.Background())
@@ -234,7 +234,7 @@ func (r *runtime) newGatewayServer(ctx context.Context) (*http.Server, error) {
 		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 	}
 
-	if err := api.Register{{ TitleCase .Name  }}HandlerFromEndpoint(ctx, mux, fmt.Sprintf(":%d", r.port), opts); err != nil {
+	if err := api.Register{{ TitleCase .ResourceName  }}SvcHandlerFromEndpoint(ctx, mux, fmt.Sprintf(":%d", r.port), opts); err != nil {
 		return nil, err
 	}
 

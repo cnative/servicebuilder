@@ -21,6 +21,7 @@ type (
 var (
 	funcs = template.FuncMap{
 		"TitleCase": strings.Title,
+		"LowerCase": strings.ToLower,
 		"Trim":      strings.Trim,
 	}
 )

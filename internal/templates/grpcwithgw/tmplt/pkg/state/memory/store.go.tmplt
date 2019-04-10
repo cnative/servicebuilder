@@ -2,15 +2,24 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
-	"{{  .ModuleName  }}/pkg/log"
-	"{{  .ModuleName  }}/pkg/state"
+	"github.com/tidwall/buntdb"
+	"google.golang.org/grpc/codes"
+
+	"{{ .ModuleName }}/pkg/log"
+	"{{ .ModuleName }}/pkg/state"
+	"github.com/rs/xid"
+	"google.golang.org/grpc/status"
 )
 
 type (
 	inMemoryStore struct {
-		db      map[string]interface{}
+		db      *buntdb.DB
+		idIndex map[string]*state.{{ .ResourceName }}
+
 		logger  *log.Logger
 		trace   bool
 		metrics bool
@@ -30,7 +39,18 @@ func (f optionFunc) apply(s *inMemoryStore) {
 
 //NewStore returns an in memory store
 func NewStore(otions ...Option) (store state.Store, err error) {
-	s := &inMemoryStore{metrics: true, trace: false}
+
+	db, err := buntdb.Open(":memory:")
+	if err != nil {
+		return nil, err
+	}
+
+	s := &inMemoryStore{
+		db:      db,
+		idIndex: make(map[string]*state.{{ .ResourceName }}),
+		metrics: true,
+		trace:   false,
+	}
 	store = s
 
 	for _, opt := range otions {
@@ -52,21 +72,31 @@ func NewStore(otions ...Option) (store state.Store, err error) {
 }
 
 func (i *inMemoryStore) Initialize(ctx context.Context) error {
+
+	if err := i.db.CreateIndex("name", "*", buntdb.IndexJSON("name")); err != nil {
+		return err
+	}
+
+	if err := i.db.CreateIndex("createAt", "*", buntdb.IndexJSON("createTime")); err != nil {
+		return err
+	}
+
+	if err := i.db.CreateIndex("updateAt", "*", buntdb.IndexJSON("updateTime")); err != nil {
+		return err
+	}
+
 	i.logger.Info("in-memory store initialized")
+
 	return nil
 }
 
 func (i *inMemoryStore) Close() error {
-	return nil
+	i.logger.Infof("closing db")
+	return i.db.Close()
 }
 
 func (i *inMemoryStore) Healthy() error {
-	i.logger.Info("store health check here")
 	return nil
-}
-
-func (i *inMemoryStore) Echo(ctx context.Context, msg string) (string, error) {
-	return fmt.Sprintf("%s: from memory", msg), nil
 }
 
 // Logger configures logger for health service
@@ -88,4 +118,206 @@ func Metrics(enable bool) Option {
 	return optionFunc(func(i *inMemoryStore) {
 		i.metrics = enable
 	})
+}
+
+func (i *inMemoryStore) Create{{ .ResourceName }}(ctx context.Context, r state.{{ .ResourceName }}) (state.{{ .ResourceName }}, error) {
+	result := state.{{ .ResourceName }}{}
+
+	if r.Name == "" {
+		return result, status.Error(codes.InvalidArgument, fmt.Sprintf("{{ LowerCase .ResourceName }} name is empty"))
+	}
+
+	found := false
+	err := i.db.View(func(tx *buntdb.Tx) error {
+		pivot := fmt.Sprintf(`{"name": "%s"}`, r.Name)
+		err := tx.AscendEqual("name", pivot, func(key, val string) bool {
+			found = true
+			return true
+		})
+
+		return err
+	})
+
+	if found {
+		return result, status.Error(codes.AlreadyExists, fmt.Sprintf(`{{ LowerCase .ResourceName }} with name '%s' already exists`, r.Name))
+	}
+
+	if err != nil && err != buntdb.ErrNotFound {
+		return result, err
+	}
+
+	guid := xid.New()
+	result.ID = guid.String()
+	now := time.Now().Unix()
+
+	result.Name = r.Name
+	result.Description = r.Description
+	result.CreatedBy = "CreatedByTBD"
+	result.UpdatedBy = "UpdatedByTBD"
+	result.CreatedAt = now
+	result.UpdatedAt = now
+
+	b, err := json.Marshal(result)
+	if err != nil {
+		return state.{{ .ResourceName }}{}, err
+	}
+
+	err = i.db.Update(func(tx *buntdb.Tx) error {
+		jsonStr := string(b)
+		_, _, err := tx.Set(result.ID, jsonStr, nil)
+
+		return err
+	})
+
+	if err != nil {
+		return state.{{ .ResourceName }}{}, err
+	}
+
+	return result, nil
+}
+
+func (i *inMemoryStore) Get{{ .ResourceName }}(ctx context.Context, id string) (state.{{ .ResourceName }}, error) {
+
+	result := state.{{ .ResourceName }}{}
+
+	if id == "" {
+		return result, status.Error(codes.InvalidArgument, fmt.Sprintf("{{ LowerCase .ResourceName }} id is empty"))
+	}
+
+	err := i.db.View(func(tx *buntdb.Tx) error {
+		val, err := tx.Get(id, false)
+		if err == nil {
+			if err := json.Unmarshal([]byte(val), &result); err != nil {
+				return err
+			}
+		}
+
+		return err
+	})
+
+	if err != nil {
+		if err == buntdb.ErrNotFound {
+			return result, status.Error(codes.NotFound, fmt.Sprintf("{{ LowerCase .ResourceName }} not found"))
+		}
+
+		return result, err
+	}
+
+	return result, nil
+}
+
+func (i *inMemoryStore) List{{ .ResourceName }}s(ctx context.Context, listReq state.ListRequest) ([]state.{{ .ResourceName }}, error) {
+
+	results := []state.{{ .ResourceName }}{}
+
+	counter := 0
+	var encodingError error
+	err := i.db.View(func(tx *buntdb.Tx) error {
+		fn := tx.Ascend
+		if listReq.SortingOrder() == state.DESC {
+			fn = tx.Descend
+		}
+		rmin := int((listReq.Page()-1)*listReq.PageSize()) + 1
+		rmax := rmin + int(listReq.PageSize()-1)
+
+		err := fn("name", func(key, val string) bool {
+			counter++
+			if counter > rmax {
+				return false
+			}
+
+			if counter >= rmin && counter <= rmax {
+				r := state.{{ .ResourceName }}{}
+				encodingError = json.Unmarshal([]byte(val), &r)
+				if encodingError != nil {
+					return false
+				}
+				results = append(results, r)
+			}
+
+			return true
+		})
+
+		if err == nil {
+			err = encodingError
+		}
+
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (i *inMemoryStore) Update{{ .ResourceName }}(ctx context.Context, r state.{{ .ResourceName }}) (state.{{ .ResourceName }}, error) {
+
+	result := state.{{ .ResourceName }}{}
+
+	if r.ID == "" {
+		return result, status.Error(codes.InvalidArgument, fmt.Sprintf("{{ LowerCase .ResourceName }} id is empty"))
+	}
+
+	err := i.db.Update(func(tx *buntdb.Tx) error {
+		val, err := tx.Get(r.ID, false)
+		if err != nil {
+			return err
+		}
+
+		if err := json.Unmarshal([]byte(val), &result); err != nil {
+			return err
+		}
+		result.Description = r.Description
+		result.UpdatedBy = "UpdatedByTBD"
+		result.UpdatedAt = time.Now().Unix()
+
+		b, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+
+		jsonStr := string(b)
+		_, _, err = tx.Set(result.ID, jsonStr, nil)
+
+		return err
+	})
+
+	if err != nil {
+		if err == buntdb.ErrNotFound {
+			return result, status.Error(codes.NotFound, fmt.Sprintf("{{ LowerCase .ResourceName }} not found"))
+		}
+
+		return state.{{ .ResourceName }}{}, err
+	}
+
+	return result, nil
+}
+
+func (i *inMemoryStore) Delete{{ .ResourceName }}(ctx context.Context, id string) error {
+
+	if id == "" {
+		return status.Error(codes.InvalidArgument, fmt.Sprintf("{{ LowerCase .ResourceName }} id is empty"))
+	}
+
+	err := i.db.Update(func(tx *buntdb.Tx) error {
+		_, err := tx.Get(id, false)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Delete(id)
+
+		return err
+	})
+
+	if err != nil {
+		if err == buntdb.ErrNotFound {
+			return status.Error(codes.NotFound, fmt.Sprintf("{{ LowerCase .ResourceName }} not found"))
+		}
+
+		return err
+	}
+
+	return nil
 }

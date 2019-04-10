@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"{{  .ModuleName  }}/pkg/health"
@@ -9,11 +10,144 @@ import (
 
 //go:generate servicebuilder iwrap -z -f ./store.go -i Store --output-dir ./ -p state -m "{{ .ModuleName }}/pkg/log"
 
+const (
+	// ASC Ascending sort order
+	ASC SortOrder = iota - 1
+	// DESC is Descending sort order
+	DESC
+)
+
+var (
+	// ErrNotImplemented not implmented yet
+	ErrNotImplemented = errors.New("not implemented")
+
+	// DefaultPageSize is the number of rows returned by default
+	DefaultPageSize = 25
+)
+
+//SortOrder indicate Sort Order
+type SortOrder int8
+
+// {{ .ResourceName }} resource with crud
+type {{ .ResourceName }} struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+
+	CreatedBy string `json:"createdBy"`
+	UpdatedBy string `json:"updatedBy"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
 // Store provides access to data that is required for .
 type Store interface {
 	Initialize(ctx context.Context) error
 	io.Closer
 	health.Probe
 
-	Echo(ctx context.Context, msg string) (string, error)
+	Create{{ .ResourceName }}(ctx context.Context, r {{ .ResourceName }}) ({{ .ResourceName }}, error)
+	Get{{ .ResourceName }}(ctx context.Context, id string) ({{ .ResourceName }}, error)
+	List{{ .ResourceName }}s(ctx context.Context, listReq ListRequest) ([]{{ .ResourceName }}, error)
+	Update{{ .ResourceName }}(ctx context.Context, r {{ .ResourceName }}) ({{ .ResourceName }}, error)
+	Delete{{ .ResourceName }}(ctx context.Context, id string) error
+}
+
+// ListRequest used for listing
+type ListRequest interface {
+	SortingOrder() SortOrder
+	SortBy() []string
+	Page() int32
+	PageSize() int32
+}
+
+type listRequest struct {
+	sortBy    []string
+	sortOrder SortOrder
+	pageSize  int32
+	page      int32
+}
+
+// ListOption used for listing
+type ListOption interface {
+	apply(*listRequest)
+}
+type optionFunc func(*listRequest)
+
+func (f optionFunc) apply(s *listRequest) {
+	f(s)
+}
+
+// NewListRequest used for searching
+func NewListRequest(opts ...ListOption) ListRequest {
+	//setup defaults
+	lReq := &listRequest{
+		sortBy:    []string{"name"},
+		sortOrder: ASC,
+		page:      1,
+		pageSize:  int32(DefaultPageSize),
+	}
+
+	for _, opt := range opts {
+		opt.apply(lReq)
+	}
+
+	return lReq
+}
+
+func (l *listRequest) SortingOrder() SortOrder {
+
+	return l.sortOrder
+}
+
+func (l *listRequest) SortBy() []string {
+
+	return l.sortBy
+}
+
+func (l *listRequest) Page() int32 {
+	return l.page
+}
+
+func (l *listRequest) PageSize() int32 {
+	return l.pageSize
+}
+
+// SortBy option to set the SortBy columns
+func SortBy(cols ...string) ListOption {
+	return optionFunc(func(l *listRequest) {
+		sortCols := []string{}
+		for _, c := range cols {
+			sortCols = append(sortCols, c)
+		}
+
+		l.sortBy = sortCols
+	})
+}
+
+// SortingOrder option use. ASC / DESC
+func SortingOrder(order SortOrder) ListOption {
+	return optionFunc(func(l *listRequest) {
+		l.sortOrder = order
+	})
+}
+
+// Page option to set the page number
+func Page(page int32) ListOption {
+	return optionFunc(func(l *listRequest) {
+		l.page = page
+		if page < 1 {
+			l.page = 1
+		}
+	})
+}
+
+// PageSize option to set the page number
+func PageSize(pageSize int32) ListOption {
+	return optionFunc(func(l *listRequest) {
+		l.pageSize = pageSize
+		if pageSize < 1 || pageSize > int32(DefaultPageSize) {
+			l.pageSize = int32(DefaultPageSize)
+		}
+	})
 }

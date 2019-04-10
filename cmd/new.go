@@ -43,9 +43,10 @@ in this example 'accounts' is the service name`)
 	newCmd.Flags().StringP("description", "", "", "a short description of the service")
 	newCmd.Flags().StringP("image-name", "i", "", "container image name")
 	newCmd.Flags().StringP("protoc-version", "", "v3.7.0", "protocol buffer version to use")
-	newCmd.Flags().StringP("http-route-prefix", "r", "/api/v1", "http route prefix")
+	newCmd.Flags().StringP("http-route-prefix", "", "/api/v1", "http route prefix")
 	newCmd.Flags().StringP("deployment-type", "", "k8s", "deployment artifact to generate. Possible values [helm, k8s]")
 	newCmd.Flags().StringP("domain-name", "", "localhost", "domain name")
+	newCmd.Flags().StringP("resource", "r", "", "resource name")
 	newCmd.Flags().StringP("path", "p", ".", "directory path where the project will be generated")
 }
 
@@ -110,6 +111,16 @@ func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
 		return nil, err
 	}
 
+	resName, err := c.Flags().GetString("resource")
+	if err != nil {
+		return nil, err
+	}
+
+	if resName == "" {
+		resName = name
+	}
+	resName = strings.Title(resName)
+
 	imgn, err := c.Flags().GetString("image-name")
 	if err != nil {
 		return nil, err
@@ -133,6 +144,7 @@ func parseAndValidateArgs(c *cobra.Command) (*builder.Options, error) {
 	return &builder.Options{
 		Name:                  name,
 		ModuleName:            mname,
+		ResourceName:          resName,
 		ImageName:             imgn,
 		Description:           description,
 		DstDir:                p,
