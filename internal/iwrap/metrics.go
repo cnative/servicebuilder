@@ -53,6 +53,11 @@ func (s *{{ lowerCase $target }}WithMetrics) Healthy() error {
 	return s.wrapped{{$target}}.Healthy()
 }
 
+// Ready calls ready on the wrapped wrapped{{$target}}.
+func (s *{{ lowerCase $target }}WithMetrics) Ready() (bool, error) {
+	return s.wrapped{{$target}}.Ready()
+}
+
 // Close calls Close on the wrapped wrapped{{$target}}.
 func (s *{{ lowerCase $target }}WithMetrics) Close() error {
 	return s.wrapped{{$target}}.Close()

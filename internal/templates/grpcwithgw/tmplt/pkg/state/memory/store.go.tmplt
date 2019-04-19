@@ -99,6 +99,10 @@ func (i *inMemoryStore) Healthy() error {
 	return nil
 }
 
+func (i *inMemoryStore) Ready() (bool, error) {
+	return true, nil
+}
+
 // Logger configures logger for health service
 func Logger(l *log.Logger) Option {
 	return optionFunc(func(i *inMemoryStore) {

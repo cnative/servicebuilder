@@ -194,7 +194,7 @@ func main() {
 	app := cli.NewApp()
 
 	app.Name = serviceName
-	app.Copyright = "(c) 2018 Copyright"
+	app.Copyright = "(c) 2019 Copyright"
 	app.Usage = "{{ .Name  }} description"
 
 	app.Version = version
