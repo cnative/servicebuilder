@@ -72,7 +72,7 @@ type storeObserver struct {
 
 // defaultIgnoredMethods are methods which are commonly found on our stores and
 // thus ignored when preloading.
-var defaultIgnoredMethods = []string{"Close", "Healthy", "C"}
+var defaultIgnoredMethods = []string{"Close", "Healthy", "Ready", "C"}
 
 // Preload counters and histograms for each method defined on s. You can
 // optionally supply extra ignoreMethods which will be added to the

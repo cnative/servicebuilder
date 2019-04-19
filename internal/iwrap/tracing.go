@@ -65,6 +65,11 @@ func (s *{{ lowerCase $target}}WithTrace) Healthy() error {
 	return s.wrapped{{$target}}.Healthy()
 }
 
+// Ready calls Ready on the wrapped {{$target}}.
+func (s *{{ lowerCase $target}}WithTrace) Ready() (bool, error) {
+	return s.wrapped{{$target}}.Ready()
+}
+
 // Close calls Close on the wrapped {{$target}}.
 func (s *{{ lowerCase $target}}WithTrace) Close() error {
 	return s.wrapped{{$target}}.Close()

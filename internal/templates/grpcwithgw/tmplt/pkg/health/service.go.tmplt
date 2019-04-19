@@ -14,6 +14,9 @@ type (
 	Probe interface {
 		// Healthy checks if service is healthy or not
 		Healthy() error
+
+		// Ready checks if the service is ready for traffic
+		Ready() (bool, error)
 	}
 
 	// Service for health check
