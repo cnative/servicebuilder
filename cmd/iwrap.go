@@ -122,6 +122,8 @@ func getType(n ast.Expr) string {
 		return fmt.Sprintf("*%s", getType(x.X))
 	case *ast.ArrayType:
 		return fmt.Sprintf("[]%s", getType(x.Elt))
+	case *ast.Ellipsis:
+		return fmt.Sprintf("...%s", getType(x.Elt))
 	}
 
 	return fmt.Sprintf("unable to process type: %T", n)
