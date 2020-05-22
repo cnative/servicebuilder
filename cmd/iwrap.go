@@ -53,6 +53,13 @@ type (
 	}
 )
 
+func (a *arg) Suffix() string {
+	if strings.HasPrefix(a.Type, "...") {
+		return "..."
+	}
+	return ""
+}
+
 var (
 	fns = template.FuncMap{
 		"last": func(x int, a interface{}) bool {

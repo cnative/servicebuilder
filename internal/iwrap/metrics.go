@@ -33,14 +33,14 @@ var _ {{ $target }} = (*{{ lowerCase $target }}WithMetrics)(nil)
 func (s *{{ lowerCase $target }}WithMetrics) {{.Name}}({{template "list" .Params}}) ({{template "list" .Returns}}) {
 	done := s.observer.Observe(ctx, "{{.Name}}")
 	defer done()
-	{{template "call" .Returns}} = s.wrapped{{$target}}.{{.Name}}({{template "call" .Params}})
+	{{template "returns" .Returns}} = s.wrapped{{$target}}.{{.Name}}({{template "params" .Params}})
 	{{if isLastReturnError .Returns }}
 		if {{ lastReturnName .Returns }} != nil {
 			stats.Record(ctx, {{ lowerCase $target }}CallErrorCount.M(1)) // Counter to track a wrapped{{$target}} call errors
 		}
 	{{end}}
 
-	return {{template "call" .Returns}}
+	return {{template "returns" .Returns}}
 }
 {{end}}
 
@@ -60,7 +60,8 @@ func (s *{{ lowerCase $target }}WithMetrics) Close() error {
 }
 
 {{define "list"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}} {{$element.Type}}{{end}}{{end}}
-{{define "call"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}}{{end}}{{end}}
+{{define "params"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{$element.Suffix}}{{end}}{{end}}{{end}}
+{{define "returns"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}}{{end}}{{end}}
 {{define "doc"}}
 {{range .Doc}}
 {{.}}
