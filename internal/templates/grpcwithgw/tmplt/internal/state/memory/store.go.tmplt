@@ -9,10 +9,11 @@ import (
 	"github.com/tidwall/buntdb"
 	"google.golang.org/grpc/codes"
 
-	"{{ .ModuleName }}/pkg/log"
-	"{{ .ModuleName }}/pkg/state"
+	"github.com/cnative/pkg/log"
 	"github.com/rs/xid"
 	"google.golang.org/grpc/status"
+
+	"{{ .ModuleName }}/internal/state"
 )
 
 type (

@@ -1,0 +1,11 @@
+package main
+
+const (
+	grpcPort    = 4540 // grpc port
+	gatewayPort = 4541 // gateway port
+
+	// secondary ports on each service
+	metricsPort = 9101 // /metrics that prometheus scrapes
+	healthPort  = 7070 // /live & /ready is wired to k8s health check
+	debugPort   = 6060 // default Debug Port where net/http/pprof data is served
+)

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+set -eu
+[ "${BASH_VERSINFO[0]}" -ge 3 ] && set -o pipefail
+
+DIR=$(dirname "$0")
+ROOTDIR=$(cd "$DIR/../" && pwd )
+
+PROTOC_VERSION={{ .ProtocVersion }}
+GOLANGCI_LINT_VERSION=1.23.8
+CFSSL_VERSION=1.4.1
+SERVICEBUILDER_VERSION=0.9.4
+
+arch=$(uname -m)
+os=$(uname -s)
+protoc_os="$os"
+
+case "$os" in
+  Darwin*)
+        os=darwin
+        protoc_os=osx
+        ;;
+  Linux*)
+        os=linux
+        protoc_os=linux
+        ;;
+  *)
+        echo "unsupported: $os"
+        exit 1
+        ;;
+esac
+
+__install_protoc() {
+    asset="protoc-${PROTOC_VERSION}-${protoc_os}-${arch}.zip"
+    protoc_url="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${asset}"
+    echo "Download $protoc_url"
+
+    curl -sLJO "$protoc_url"
+    unzip -d "$ROOTDIR/.tools" "$asset"
+    rm -rf "$asset"
+}
+
+__install_golangci_lint() {
+    local asset="golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64.tar.gz"
+    local url="https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64.tar.gz"
+    echo "Download $url"
+
+    curl -fsLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/bin --strip-components=1 -zxf ${asset} "golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64/golangci-lint"
+    rm -rf ${asset}
+}
+
+__install_cfssl() {
+    local baseURL="https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VERSION}"
+
+    local url="$baseURL/cfssl_${CFSSL_VERSION}_${os}_amd64"
+    echo "Download $url"
+
+    curl -fsLJ -o "$ROOTDIR/.tools/bin/cfssl" "$url"
+    chmod +x "$ROOTDIR/.tools/bin/cfssl"
+
+    local url="$baseURL/cfssljson_${CFSSL_VERSION}_${os}_amd64"
+    echo "Download $url"
+
+    curl -fsLJ -o "$ROOTDIR/.tools/bin/cfssljson" "$url"
+    chmod +x "$ROOTDIR/.tools/bin/cfssljson"
+}
+
+__install_servicebuilder() {
+    local asset=servicebuilder_${os}_amd64.tar.gz
+    local servicebuilder_url=https://github.com/cnative/servicebuilder/releases/download/v${SERVICEBUILDER_VERSION}/${asset}
+    echo "Download $servicebuilder_url"
+
+    curl -sLJO "${servicebuilder_url}"
+    tar -C "${ROOTDIR}"/.tools/bin -zxf "${asset}"
+    rm -rf "${asset}"
+}
+
+__install_gotools() {
+    go install golang.org/x/tools/cmd/goimports
+    go install github.com/golang/protobuf/protoc-gen-go
+    go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+    go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
+    go install github.com/golang/mock/mockgen
+    go install github.com/go-bindata/go-bindata/go-bindata
+}
+
+rm -rf "$ROOTDIR/.tools"
+mkdir -p "$ROOTDIR/.tools/bin"
+
+__install_protoc
+
+__install_golangci_lint
+
+__install_cfssl
+
+__install_servicebuilder
+
+__install_gotools

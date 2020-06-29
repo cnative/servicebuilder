@@ -5,10 +5,10 @@ import (
 	"errors"
 	"io"
 
-	"{{  .ModuleName  }}/pkg/health"
+	"github.com/cnative/pkg/health"
 )
 
-//go:generate servicebuilder iwrap -z -f ./store.go -i Store --output-dir ./ -p state -m "{{ .ModuleName }}/pkg/log"
+//go:generate servicebuilder iwrap -z -f ./store.go -i Store --output-dir ./ -p state -m "github.com/cnative/pkg/log"
 
 const (
 	// ASC Ascending sort order

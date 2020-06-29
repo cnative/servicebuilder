@@ -67,5 +67,5 @@ cd servicebuilder
 git remote add upstream git@github.com:cnative/servicebuilder.git
 git remote set-url --push upstream no_push
 
-make install-deptools clean bulid
+make install-deptools clean build
 ```
