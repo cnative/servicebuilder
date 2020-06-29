@@ -8,6 +8,8 @@ const MetricsTmplt = `
 
 package {{ .PackageName }}
 import (
+	"context"
+
 	"go.opencensus.io/stats"
 
 	{{range .CustomImports}}

@@ -1,0 +1,290 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/cnative/pkg/auth"
+	"github.com/cnative/pkg/health"
+	"github.com/cnative/pkg/server"
+	"github.com/pkg/errors"
+	"github.com/urfave/cli"
+)
+
+const (
+	systemAdminGroup = "{{ .Name }}:admin" // external group which is received as a claim
+	serviceAdminRole = "admin"     // name of the service admin role
+)
+
+var (
+	version   = "unknown"
+	gitCommit = "unknown"
+
+	app           = cli.NewApp()
+	errorExitCode = cli.NewExitError("", 1)
+
+	// used to specify TLS Certificate file
+	tlsCertFile = cli.StringFlag{
+		Name:   "tls-cert-file",
+		Usage:  "x509 server certificate for TLS",
+		EnvVar: "TLS_CERT_FILE",
+	}
+
+	// used to specify TLS Private Key File
+	tlsPrivateKeyFile = cli.StringFlag{
+		Name:   "tls-private-key-file",
+		Usage:  "x509 private key matching --tls-cert-file",
+		EnvVar: "TLS_CERT_PRIVATE_KEY_FILE",
+	}
+
+	// used to point to directory containing TLS Certificate and Private Key files
+	tlsCertDir = cli.StringFlag{
+		Name:   "tls-cert-dir",
+		Usage:  "directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored",
+		EnvVar: "TLS_CERT_DIR",
+	}
+
+	// points to file that is used to validate/verify Clients in a TLS handshake
+	clientCAFile = cli.StringFlag{
+		Name:   "client-ca-file",
+		Usage:  "if set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate",
+		EnvVar: "CLIENT_CA_FILE",
+	}
+
+	// rootCAFile points to file that is used to validate/verify Servers in a TLS handshake
+	rootCAFile = cli.StringFlag{
+		Name:   "root-ca-file",
+		Usage:  "path to a cert file for the certificate authority used to verify server",
+		EnvVar: "ROOT_CA_FILE",
+	}
+
+	// flag to turn off TLS for server
+	insecureSkipTLS = cli.BoolFlag{
+		Name:   "insecure-skip-tls",
+		Hidden: true,
+		Usage:  "used only for dev purpose. start the server without TLS",
+	}
+
+	// InsecureSkipVerifyTLS controls whether a client verifies the
+	// server's certificate chain and host name.
+	// If InsecureSkipVerify is true, TLS accepts any certificate
+	// presented by the server and any host name in that certificate.
+	// In this mode, TLS is susceptible to man-in-the-middle attacks.
+	// This should be used only for testing.
+	insecureSkipVerifyTLS = cli.BoolFlag{
+		Name:   "insecure-skip-verify-tls",
+		Hidden: true,
+		Usage:  "used only for dev purpose. client ignores server host name verification",
+	}
+
+	appFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:   "debug",
+			Usage:  "Enable debug logging",
+			EnvVar: "DEBUG",
+		},
+		cli.UintFlag{
+			Name:   "debug-port",
+			Usage:  "debug port on which net/http/pprof data is exposed",
+			Value:  debugPort,
+			EnvVar: "DEBUG_PORT",
+		},
+		cli.UintFlag{
+			Name:   "health-port",
+			Value:  healthPort,
+			EnvVar: "HEALTH_PORT",
+		},
+		cli.UintFlag{
+			Name:   "metrics-port",
+			Value:  metricsPort,
+			EnvVar: "METRICS_PORT",
+		},
+		cli.BoolFlag{
+			Name:   "skip-process-metrics",
+			Usage:  "skip collecting process metrics",
+			EnvVar: "SKIP_PROCESS_METRICS",
+		},
+		cli.StringSliceFlag{
+			Name:   "tag",
+			Usage:  "info attributes for server. name value pairs of the format key=value. repeat this flag to specify multiple label.",
+			EnvVar: "SERVER_TAGS",
+		},
+		cli.StringFlag{
+			Name:   "rollbar-token",
+			Usage:  "rollbar token to report warning and above log levels",
+			EnvVar: "ROLLBAR_TOKEN",
+		},
+	}
+
+	serviceFlags = []cli.Flag{
+		cli.UintFlag{
+			Name:   "grpc-port",
+			Value:  grpcPort,
+			EnvVar: "GRPC_PORT",
+		},
+		cli.UintFlag{
+			Name:   "gateway-port",
+			Value:  gatewayPort,
+			EnvVar: "GATEWAY_PORT",
+		},
+		cli.BoolFlag{
+			Name:   "no-gateway",
+			EnvVar: "NO_GATEWAY",
+		},
+		cli.StringFlag{
+			Name:  "state-store",
+			Usage: "storage driver, currently supported [memory]",
+			Value: "memory",
+		},
+		tlsCertFile,
+		tlsPrivateKeyFile,
+		tlsCertDir,
+		clientCAFile,
+		insecureSkipTLS,
+	}
+
+	serviceCommand = cli.Command{
+		Name:  "server",
+		Usage: "start server",
+		Action: func(c *cli.Context) (err error) {
+			cp := &cliParser{ctx: c, withGRPCServer: true, withGateway: true}
+			return serverAction(cp)
+		},
+		Flags: append(serviceFlags, odicFlags...),
+	}
+
+	// ErrMissingTLSInfo TLS connect information not specified
+	ErrMissingTLSInfo = errors.Errorf("TLS key and/or cert files not specified. use '--%s' or '--%s' / '--%s'", tlsCertDir.Name, tlsPrivateKeyFile.Name, tlsCertFile.Name)
+)
+
+func isPortValid(port uint) bool {
+	return port > 0 && port < 65535
+}
+
+func tagsFromSlice(lbs []string) map[string]string {
+	tagMap := map[string]string{}
+	for _, s := range lbs {
+		nv := strings.Split(s, ",")
+		for _, l := range nv {
+			nv := strings.Split(l, "=")
+			if len(nv) == 2 {
+				tagMap[nv[0]] = nv[1]
+			}
+		}
+	}
+
+	return tagMap
+}
+
+func init() {
+	cli.VersionPrinter = func(c *cli.Context) {
+		fmt.Printf("%s\n Version:  %s\n Git Commit:  %s\n Go Version:  %s\n OS/Arch:  %s/%s\n Built:  %s\n",
+			"{{ .Name }}", version, gitCommit, runtime.Version(), runtime.GOOS, runtime.GOARCH, c.App.Compiled)
+	}
+
+	app.Name = "{{ .Name }}"
+	app.Copyright = "(c) 2019 Copyright"
+	app.Usage = "{{ .Description  }}"
+
+	app.Version = version
+	app.Flags = append(appFlags, ocExporterFlags...)
+	app.Commands = []cli.Command{
+		serviceCommand,
+	}
+}
+
+func serverAction(cp *cliParser) (err error) {
+	o, err := cp.getConfig()
+	if err != nil {
+		return errors.Errorf("invalid or missing cli arguments - %v", err)
+	}
+
+	serviceName := "{{ .Name }}"
+
+	logger, err := getRootLogger(serviceName, o)
+	if err != nil {
+		return err
+	}
+	defer logger.Flush()
+
+	logger.Infof("starting %s server", serviceName)
+
+	authOpts := []auth.Option{
+		auth.Logger(logger),
+		auth.AdminGroupRoleMapping(systemAdminGroup, serviceAdminRole),
+	}
+
+	// basic options that are common for all servers
+	opts := []server.Option{
+		server.Logger(logger),
+		server.Debug(o.debug, o.dPort), server.HealthPort(o.hPort), server.MetricsPort(o.mPort),
+		server.ProcessMetrics(!o.skipProcessMetrics), server.Tags(o.tags),
+		server.Trace(o.ocAgent.traceEnabled),
+		server.OCAgentEP(o.ocAgent.host, o.ocAgent.port), server.OCAgentNamespace(o.ocAgent.namespace),
+	}
+
+	if !o.tls.skip {
+		opts = append(opts, server.TLSCred(o.tls.certFile, o.tls.keyFile, o.tls.caFile))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := getStateStore(ctx, logger, o)
+	if err != nil {
+		return errors.Wrapf(err, "unable to create %s store", serviceName)
+	}
+	defer store.Close()
+	handler := newServiceHandler(store, logger)
+	opts = append(opts,
+		server.Probes(map[string]health.Probe{"store": store}),
+		server.GRPCAPI(handler), server.GRPCPort(o.gPort),
+		server.Gateway(o.gwEnabled), server.GatewayPort(o.gwPort),
+	)
+	// if the server needs open id connect based auth then
+	if oidcOpts := oidcOptionsFromCLI(cp.ctx); len(oidcOpts) > 0 {
+		// service must setup necesary command line args for this
+		authCtx, err := auth.NewRuntime(ctx, append(authOpts, oidcOpts...)...)
+		if err != nil {
+			return errors.Wrapf(err, "unable to create oidc runtime auth context")
+		}
+		opts = append(opts, server.AuthRuntime(authCtx))
+	}
+
+	rt, err := server.NewRuntime(ctx, serviceName, opts...)
+	if err != nil {
+		return errors.Wrapf(err, "unable to create %s server runtime", serviceName)
+	}
+
+	errc, err := rt.Start(ctx)
+	if err != nil {
+		return errorExitCode
+	}
+
+	logger.Infof("starting %s server...", serviceName)
+
+	err = <-errc // blocking on error channel
+	if err != nil {
+		logger.Errorf("Received error from error channel %v", err)
+	}
+	rt.Stop(ctx)
+
+	return err
+}
+
+func main() {
+	// Initialize the pseudo-random number generator with a unique value so we
+	// get unique sequences across runs.
+	rand.Seed(time.Now().UnixNano())
+
+	if err := app.Run(os.Args); err != nil {
+		log.SetFlags(0)
+		log.Fatalf("%v\n", err)
+	}
+}

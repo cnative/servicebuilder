@@ -1,0 +1,52 @@
+package main
+
+import "github.com/urfave/cli"
+
+type (
+	ocExporterConfig struct {
+		traceEnabled bool
+		host         string
+		port         uint
+		namespace    string
+	}
+)
+
+var (
+	ocExporterFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:   "no-trace",
+			Usage:  "Disable tracing",
+			EnvVar: "TRACE_DISABLED",
+		},
+		cli.StringFlag{
+			Name:   "oc-agent-host",
+			Value:  "localhost",
+			Usage:  "opencensus agent host",
+			EnvVar: "OC_AGENT_HOST",
+		},
+		cli.UintFlag{
+			Name:   "oc-agent-port",
+			Value:  55678,
+			Usage:  "opencensus agent port",
+			EnvVar: "OC_AGENT_PORT",
+		},
+		cli.StringFlag{
+			Name:   "oc-namespace",
+			Usage:  "service namespace",
+			EnvVar: "OC_NAMESPACE",
+		},
+	}
+)
+
+func getOCExporterConfigFromCLI(c *cli.Context, serviceName string) ocExporterConfig {
+	ns := c.GlobalString("oc-namespace")
+	if ns == "" {
+		ns = serviceName
+	}
+	return ocExporterConfig{
+		traceEnabled: !c.GlobalBool("no-trace"),
+		host:         c.GlobalString("oc-agent-host"),
+		port:         c.GlobalUint("oc-agent-port"),
+		namespace:    ns,
+	}
+}

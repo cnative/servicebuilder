@@ -1,0 +1,247 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"path"
+	"path/filepath"
+
+	"github.com/pkg/errors"
+	"github.com/urfave/cli"
+
+	"github.com/cnative/pkg/log"
+
+	"{{ .ModuleName }}/internal/state"
+	"{{ .ModuleName }}/internal/state/memory"
+)
+
+type tlsConfig struct {
+	certFile string
+	keyFile  string
+	caFile   string
+	skip     bool
+}
+
+type serverConfig struct {
+	ocAgent            ocExporterConfig
+	tls                tlsConfig
+	debug              bool
+	gPort              uint
+	htPort             uint
+	hPort              uint
+	mPort              uint
+	dPort              uint
+	gwPort             uint
+	gwEnabled          bool
+	stateStore         string
+	skipProcessMetrics bool
+	tags               map[string]string
+	rollbarToken       string
+}
+
+type cliParser struct {
+	withGateway    bool
+	withHTTPServer bool
+	withGRPCServer bool
+	ctx            *cli.Context
+}
+
+func (c *cliParser) isTLSRequired() bool {
+	return c.withGateway || c.withHTTPServer || c.withGRPCServer
+}
+
+func (c *cliParser) getConfig() (*serverConfig, error) {
+
+	ports, err := c.getNamedPorts()
+	if err != nil {
+		return nil, err
+	}
+
+	var tlsConfig tlsConfig
+	if c.isTLSRequired() {
+		tlsConfig, err = getTLSConfigFromCLI(c.ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tags := tagsFromSlice(c.ctx.GlobalStringSlice("tag"))
+
+	if _, ok := tags["version"]; !ok {
+		tags["version"] = app.Version
+	}
+
+	return &serverConfig{
+		ocAgent:            getOCExporterConfigFromCLI(c.ctx, "{{ .Name }}"),
+		gPort:              ports["grpc-port"],
+		htPort:             ports["http-port"],
+		dPort:              ports["debug-port"],
+		hPort:              ports["health-port"],
+		mPort:              ports["metrics-port"],
+		gwPort:             ports["gateway-port"],
+		tls:                tlsConfig,
+		stateStore:         c.ctx.String("state-store"),
+		debug:              c.ctx.GlobalBool("debug"),
+		gwEnabled:          c.withGateway && !c.ctx.Bool("no-gateway"),
+		skipProcessMetrics: c.ctx.GlobalBool("skip-process-metrics"),
+		tags:               tags,
+		rollbarToken:       c.ctx.GlobalString("rollbar-token"),
+	}, nil
+}
+
+func (c *cliParser) getNamedPorts() (map[string]uint, error) {
+
+	ports := make(map[uint]string)
+	portsMap := make(map[string]uint)
+
+	// health port
+	healthPort := c.ctx.GlobalUint("health-port")
+	if !isPortValid(healthPort) {
+		return nil, fmt.Errorf("invalid health-port number: %d", healthPort)
+	}
+	if s, ok := ports[healthPort]; ok {
+		return nil, errors.Errorf("%v and health-port cannot be the same", s)
+	}
+	ports[healthPort] = "health-port"
+	portsMap["health-port"] = healthPort
+
+	// metrics port
+	metricsPort := c.ctx.GlobalUint("metrics-port")
+	if !isPortValid(metricsPort) {
+		return nil, fmt.Errorf("invalid metrics-port number: %d", metricsPort)
+	}
+	if s, ok := ports[metricsPort]; ok {
+		return nil, errors.Errorf("%v and metrics-port cannot be the same", s)
+	}
+	ports[metricsPort] = "metrics-port"
+	portsMap["metrics-port"] = metricsPort
+
+	// debug port
+	if c.ctx.GlobalBool("debug") {
+		debugPort := c.ctx.GlobalUint("debug-port")
+		if !isPortValid(debugPort) {
+			return nil, fmt.Errorf("invalid debug-port number: %d", debugPort)
+		}
+		if s, ok := ports[debugPort]; ok {
+			return nil, errors.Errorf("%v and debug-port cannot be the same", s)
+		}
+		ports[debugPort] = "debug-port"
+		portsMap["debug-port"] = debugPort
+	}
+
+	// grpc port
+	if c.withGRPCServer {
+		grpcPort := c.ctx.Uint("grpc-port")
+		if !isPortValid(grpcPort) {
+			return nil, fmt.Errorf("invalid grpc-port number: %d", grpcPort)
+		}
+		if s, ok := ports[grpcPort]; ok {
+			return nil, errors.Errorf("%v and grpc-port cannot be the same", s)
+		}
+		ports[grpcPort] = "grpc-port"
+		portsMap["grpc-port"] = grpcPort
+	}
+
+	// grpc gateway port
+	gwEnabled := !c.ctx.Bool("no-gateway")
+	if c.withGateway && gwEnabled { // not all services support gw and it might be turned off optionally
+		gwPort := c.ctx.Uint("gateway-port")
+		if !isPortValid(gwPort) {
+			return nil, fmt.Errorf("invalid gateway-port number: %d", gwPort)
+		}
+		if s, ok := ports[gwPort]; ok {
+			return nil, errors.Errorf("%v and gateway-port cannot be the same", s)
+		}
+		ports[gwPort] = "gateway-port"
+		portsMap["gateway-port"] = gwPort
+	}
+
+	// http port
+	if c.withHTTPServer {
+		httpPort := c.ctx.Uint("http-port")
+		if !isPortValid(httpPort) {
+			return nil, fmt.Errorf("invalid http-port number: %d", httpPort)
+		}
+		if s, ok := ports[httpPort]; ok {
+			return nil, errors.Errorf("%v and http-port cannot be the same", s)
+		}
+		ports[httpPort] = "http-port"
+		portsMap["http-port"] = httpPort
+	}
+
+	return portsMap, nil
+}
+
+func getStateStore(ctx context.Context, logger *log.Logger, o *serverConfig) (store state.Store, err error) {
+	switch o.stateStore {
+	case "memory":
+		store, err = memory.NewStore(memory.Logger(logger), memory.Trace(o.ocAgent.traceEnabled))
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid store: %s", o.stateStore)
+	}
+	return store, store.Initialize(ctx)
+}
+
+func getRootLogger(name string, c *serverConfig) (*log.Logger, error) {
+	ll := log.InfoLevel
+	if c.debug {
+		ll = log.DebugLevel
+	}
+
+	return log.New(log.WithName(name), log.WithLevel(ll), log.WithRollbar(c.rollbarToken, log.WarnLevel), log.WithTags(c.tags))
+}
+
+func getTLSConfigFromCLI(c *cli.Context) (tls tlsConfig, err error) {
+
+	keyFile := c.String(tlsPrivateKeyFile.Name)
+	certFile := c.String(tlsCertFile.Name)
+	certDir := c.String(tlsCertDir.Name)
+
+	if keyFile == "" && certFile == "" && certDir != "" {
+		keyFile = path.Join(certDir, "tls.key")
+		certFile = path.Join(certDir, "tls.crt")
+	}
+
+	if (keyFile == "" || certFile == "") && !c.Bool(insecureSkipTLS.Name) {
+		err = ErrMissingTLSInfo
+		return
+	}
+
+	tls.certFile = certFile
+	tls.keyFile = keyFile
+	tls.caFile = c.String(clientCAFile.Name)
+	tls.skip = c.Bool(insecureSkipTLS.Name)
+
+	return resolveAbsFilePath(tls)
+}
+
+func resolveAbsFilePath(tls tlsConfig) (tlsConfig, error) {
+	if tls.certFile != "" {
+		f, err := filepath.Abs(tls.certFile)
+		if err != nil {
+			return tlsConfig{}, err
+		}
+		tls.certFile = f
+	}
+
+	if tls.keyFile != "" {
+		f, err := filepath.Abs(tls.keyFile)
+		if err != nil {
+			return tlsConfig{}, err
+		}
+		tls.keyFile = f
+	}
+
+	if tls.caFile != "" {
+		f, err := filepath.Abs(tls.caFile)
+		if err != nil {
+			return tlsConfig{}, err
+		}
+		tls.caFile = f
+	}
+
+	return tls, nil
+}

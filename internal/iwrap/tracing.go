@@ -11,6 +11,7 @@ package {{ .PackageName }}
 import (
 	"fmt"
 	"strings"
+	"context"
 
 	"go.opencensus.io/trace"
 

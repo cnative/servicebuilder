@@ -1,0 +1,86 @@
+package main
+
+import (
+	"strings"
+
+	"github.com/cnative/pkg/auth"
+	"github.com/urfave/cli"
+)
+
+var (
+	odicFlags = []cli.Flag{
+
+		// OIDCIssuerURL flag to specify  oidc issuer url
+		cli.StringFlag{
+			Name:   "oidc-issuer-url",
+			Usage:  "URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT)",
+			EnvVar: "OIDC_ISSUER_URL",
+		},
+
+		// OIDCClientID flag to specify oidc client id
+		cli.StringFlag{
+			Name:   "oidc-client-id",
+			Usage:  "client ID for the OpenID Connect client, must be set if oidc-issuer-url is set",
+			EnvVar: "OIDC_CLIENT_ID",
+		},
+
+		// OIDCCAFlag flag to specify root ca of oidc issuer server
+		cli.StringFlag{
+			Name:   "oidc-ca-file",
+			Usage:  "If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used",
+			EnvVar: "OIDC_CA_CERT_FILE",
+		},
+
+		// OIDCRequiredClaim flag to specify minimum required oidc claims
+		cli.StringSliceFlag{
+			Name:   "oidc-required-claim",
+			Usage:  "If set, the claim, which is name value pairs of the format key=value is verified to be present in the ID Token with a matching value. repeat this flag to specify multiple label",
+			EnvVar: "OIDC_REQUIRED_CLAIMS",
+		},
+
+		// OIDCSigningAlgos flag to specify signing algorithms to use
+		cli.StringFlag{
+			Name:   "oidc-signing-algos",
+			Usage:  "JOSE asymmetric signing algorithms. JWTs with a 'alg' header value not in this list will be rejected. Values are defined by RFC 7518 https://tools.ietf.org/html/rfc7518#section-3.1",
+			Value:  "RS256",
+			EnvVar: "OIDC_SIGNING_ALGOS",
+		},
+	}
+)
+
+// OIDC options from from the cli context. if no oidc flags are defined for the server
+// then empty array is returned
+func oidcOptionsFromCLI(c *cli.Context) (opts []auth.Option) {
+	if c.String("oidc-issuer-url") == "" {
+		return
+	}
+
+	requiredClaims := map[string]string{}
+	for _, l := range c.StringSlice("oidc-required-claim") {
+		nv := strings.Split(l, "=")
+		if len(nv) == 2 {
+			requiredClaims[nv[0]] = nv[1]
+		}
+	}
+
+	if issuerURL := c.String("oidc-issuer-url"); issuerURL != "" {
+		opts = append(opts, auth.OIDCIssuer(issuerURL))
+	}
+	if clientID := c.String("oidc-client-id"); clientID != "" {
+		opts = append(opts, auth.OIDCAudience(clientID))
+	}
+
+	if caFile := c.String("oidc-ca-file"); caFile != "" {
+		opts = append(opts, auth.OIDCCAFile(caFile))
+	}
+
+	sa := c.String("oidc-signing-algos")
+	if signingAlgos := strings.Split(sa, ","); sa != "" && len(signingAlgos) > 0 {
+		opts = append(opts, auth.OIDCSigningAlgos(signingAlgos))
+	}
+	if len(requiredClaims) > 0 {
+		opts = append(opts, auth.OIDCRequiredClaims(requiredClaims))
+	}
+
+	return opts
+}
