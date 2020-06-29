@@ -53,6 +53,13 @@ type (
 	}
 )
 
+func (a *arg) Suffix() string {
+	if strings.HasPrefix(a.Type, "...") {
+		return "..."
+	}
+	return ""
+}
+
 var (
 	fns = template.FuncMap{
 		"last": func(x int, a interface{}) bool {
@@ -122,6 +129,8 @@ func getType(n ast.Expr) string {
 		return fmt.Sprintf("*%s", getType(x.X))
 	case *ast.ArrayType:
 		return fmt.Sprintf("[]%s", getType(x.Elt))
+	case *ast.Ellipsis:
+		return fmt.Sprintf("...%s", getType(x.Elt))
 	}
 
 	return fmt.Sprintf("unable to process type: %T", n)

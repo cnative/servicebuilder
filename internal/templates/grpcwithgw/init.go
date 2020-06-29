@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//go:generate go-bindata -o ./grpc_service_with_gw.go -pkg grpcwithgw -nomemcopy -nometadata -prefix tmplt tmplt/...
+//go:generate go-bindata -o ./grpc_service_with_gw.go -pkg grpcwithgw -nomemcopy -prefix tmplt tmplt/...
 
 type (
 	grpcServiceTemplateProvider struct {

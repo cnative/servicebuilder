@@ -11,6 +11,7 @@ package {{ .PackageName }}
 import (
 	"fmt"
 	"strings"
+	"context"
 
 	"go.opencensus.io/trace"
 
@@ -44,7 +45,7 @@ func (s *{{ lowerCase $target}}WithTrace) {{.Name}}({{template "list" .Params}})
 	ctx, span := trace.StartSpan(ctx, "{{.Name}}")
 	defer span.End()
 
-	{{template "call" .Returns}} = s.wrapped{{$target}}.{{.Name}}({{template "call" .Params}})
+	{{template "returns" .Returns}} = s.wrapped{{$target}}.{{.Name}}({{template "params" .Params}})
 	{{if isLastReturnError .Returns }}
 		if {{ lastReturnName .Returns }} != nil {
 			span.Annotate([]trace.Attribute{
@@ -53,7 +54,7 @@ func (s *{{ lowerCase $target}}WithTrace) {{.Name}}({{template "list" .Params}})
 		}
 	{{end}}
 
-	return {{template "call" .Returns}}
+	return {{template "returns" .Returns}}
 }
 {{end}}
 
@@ -74,7 +75,8 @@ func (s *{{ lowerCase $target}}WithTrace) Close() error {
 }
 
 {{define "list"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}} {{$element.Type}}{{end}}{{end}}
-{{define "call"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}}{{end}}{{end}}
+{{define "params"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{$element.Suffix}}{{end}}{{end}}{{end}}
+{{define "returns"}}{{range $index, $element := .}}{{if $index}}, {{end}}{{if $element.Name}}{{$element.Name}}{{end}}{{end}}{{end}}
 
 {{define "error"}}{{end}}
 

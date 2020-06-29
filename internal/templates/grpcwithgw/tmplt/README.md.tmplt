@@ -1,6 +1,6 @@
 # {{ .Name  }}
 
-{{ .Name  }} description
+{{ .Description  }}
 
 {{ .Name  }} is a service in based on [`servicebuilder`](https://github.com/cnative/servicebuilder/) that
 
@@ -50,9 +50,9 @@
 - Add your project specific flags / command line arguments in `cmd/{{ .Name  }}/server.go`
 - Define your protobuf messaages and grpc services in `{{ .Name  }}.proto` file.
 - Run `make gen`. This will generate requred structs and service methods from the proto file.
-- Implement the business logic for your service methods in `pkg/server` package
+- Implement the business logic for your service methods
 - Run `make build`. This will build a binary `{{ .Name  }}` under `./bin` folder
-- Often times the service needs to interact with some store. For example a sql store or a nosql store like mongo or bolddb. A Store interface defines all the persistence/repo methods and you there could be multiple implementations for the persistence layer. The store interface methods and various implmentations are defined in `pkg/state` package.
+- Often times the service needs to interact with some store. For example a sql store or a nosql store like mongo or bolddb. A Store interface defines all the persistence/repo methods and you there could be multiple implementations for the persistence layer. The store interface methods and various implmentations are defined in `internal/state` package.
 
 ### Running
 
