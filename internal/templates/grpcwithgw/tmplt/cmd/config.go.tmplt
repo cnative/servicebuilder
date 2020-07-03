@@ -176,9 +176,8 @@ func (c *cliParser) getNamedPorts() (map[string]uint, error) {
 func getStateStore(ctx context.Context, logger *log.Logger, o *serverConfig) (store state.Store, err error) {
 	switch o.stateStore {
 	case "pgsql":
-		ds := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", o.db.user, o.db.password, o.db.host, o.db.port, o.db.name)
-		logger.Infow("connecting to database", "datasource", ds)
-		store, err = state.NewPostgresStore(logger, ds)
+		logger.Infow("connecting to database", "datasource", fmt.Sprintf("postgres://%s:****@%s:%d/%s?sslmode=disable", o.db.user, o.db.host, o.db.port, o.db.name))
+		store, err = state.NewPostgresStore(logger, fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", o.db.user, o.db.password, o.db.host, o.db.port, o.db.name))
 		if err != nil {
 			return nil, err
 		}
