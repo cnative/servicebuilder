@@ -29,7 +29,7 @@ install-deptools: deps ## install dependent go tools
 
 .PHONY: gen
 gen:
-	$Q go generate ./pkg/api ./internal/state ; $(info $(M) generating grpc api server handler, gateway, swagger and metrics & trace store …)
+	$Q go generate ./pkg/api ./internal/state ./db/postgres; $(info $(M) generating grpc api server handler, gateway, swagger and metrics & trace store …)
 
 .PHONY: fmt
 fmt: ## run go fmt on all source files

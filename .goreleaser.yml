@@ -23,11 +23,13 @@ changelog:
     - '^test:'
     - Merge pull request
     - Merge branch
-archive:
-  name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
-  format_overrides:
-  - goos: windows
-    format: zip
+archives:
+  -
+    id: servicebuilder
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    format_overrides:
+      - goos: windows
+        format: zip
 brew:
   github:
     owner: cnative
