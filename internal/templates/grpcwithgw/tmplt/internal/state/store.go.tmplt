@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+    "time"
 
 	"github.com/cnative/pkg/health"
 )
@@ -30,14 +31,13 @@ type SortOrder int8
 
 // {{ .ResourceName }} resource with crud
 type {{ .ResourceName }} struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-
-	CreatedBy string `json:"createdBy"`
-	UpdatedBy string `json:"updatedBy"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID          string    `db:"id" json:"id,omitempty"`
+	Name        string    `db:"name" json:"name,omitempty"`
+	Description string    `db:"description" json:"description,omitempty"`
+	CreatedBy   string    `db:"created_by" json:"created_by,omitempty"`
+	UpdatedBy   string    `db:"updated_by" json:"updated_by,omitempty"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at,omitempty"`
+	UpdatedAt   time.Time `db:"updated_at" json:"updated_at,omitempty"`
 }
 
 // Store provides access to data that is required for .
@@ -55,6 +55,7 @@ type Store interface {
 
 // ListRequest used for listing
 type ListRequest interface {
+    Name() string
 	SortingOrder() SortOrder
 	SortBy() []string
 	Page() int32
@@ -62,6 +63,7 @@ type ListRequest interface {
 }
 
 type listRequest struct {
+    name      string
 	sortBy    []string
 	sortOrder SortOrder
 	pageSize  int32
@@ -79,9 +81,10 @@ func (f optionFunc) apply(s *listRequest) {
 }
 
 // NewListRequest used for searching
-func NewListRequest(opts ...ListOption) ListRequest {
+func NewListRequest(name string, opts ...ListOption) ListRequest {
 	//setup defaults
 	lReq := &listRequest{
+        name:      name,
 		sortBy:    []string{"name"},
 		sortOrder: ASC,
 		page:      1,
@@ -93,6 +96,11 @@ func NewListRequest(opts ...ListOption) ListRequest {
 	}
 
 	return lReq
+}
+
+func (l *listRequest) Name() string {
+
+	return l.name
 }
 
 func (l *listRequest) SortingOrder() SortOrder {

@@ -60,6 +60,15 @@ func (u *{{ LowerCase .ResourceName  }}Service) Create{{ .ResourceName  }}(ctx c
 	if err != nil {
 		return nil, err
 	}
+    capb, err := ptypes.TimestampProto(response.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	uapb, err := ptypes.TimestampProto(response.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
 
 	return &api.{{ .ResourceName  }}{
 		Id:          response.ID,
@@ -67,8 +76,8 @@ func (u *{{ LowerCase .ResourceName  }}Service) Create{{ .ResourceName  }}(ctx c
 		Description: response.Description,
 		CreatedBy:   response.CreatedBy,
 		UpdatedBy:   response.UpdatedBy,
-		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
-		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+		CreatedAt:   capb,
+		UpdatedAt:   uapb,
 	}, nil
 }
 
@@ -79,14 +88,25 @@ func (u *{{ LowerCase .ResourceName  }}Service) Get{{ .ResourceName  }}(ctx cont
 		return nil, err
 	}
 
+
+	capb, err := ptypes.TimestampProto(response.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	uapb, err := ptypes.TimestampProto(response.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.{{ .ResourceName  }}{
 		Id:          response.ID,
 		Name:        response.Name,
 		Description: response.Description,
 		CreatedBy:   response.CreatedBy,
 		UpdatedBy:   response.UpdatedBy,
-		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
-		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+		CreatedAt:   capb,
+		UpdatedAt:   uapb,
 	}, nil
 }
 
@@ -97,7 +117,7 @@ func (u *{{ LowerCase .ResourceName  }}Service) List{{ .ResourceName  }}s(ctx co
 		sortingOrder = state.DESC
 	}
 
-	results, err := u.store.List{{ .ResourceName  }}s(ctx, state.NewListRequest(
+	results, err := u.store.List{{ .ResourceName  }}s(ctx, state.NewListRequest(req.Name,
 		state.Page(req.Page), state.PageSize(req.PageSize),
 		state.SortBy(req.SortBy...), state.SortingOrder(sortingOrder),
 	))
@@ -108,14 +128,23 @@ func (u *{{ LowerCase .ResourceName  }}Service) List{{ .ResourceName  }}s(ctx co
 
 	items := []*api.{{ .ResourceName  }}{}
 	for _, r := range results {
+		capb, err := ptypes.TimestampProto(r.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		uapb, err := ptypes.TimestampProto(r.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
 		a := &api.{{ .ResourceName  }}{
 			Id:          r.ID,
 			Name:        r.Name,
 			Description: r.Description,
 			CreatedBy:   r.CreatedBy,
 			UpdatedBy:   r.UpdatedBy,
-			CreatedAt:   &timestamp.Timestamp{Seconds: r.CreatedAt},
-			UpdatedAt:   &timestamp.Timestamp{Seconds: r.UpdatedAt},
+			CreatedAt:   capb,
+			UpdatedAt:   uapb,
 		}
 		items = append(items, a)
 	}
@@ -135,14 +164,24 @@ func (u *{{ LowerCase .ResourceName  }}Service) Update{{ .ResourceName  }}(ctx c
 		return nil, err
 	}
 
+	capb, err := ptypes.TimestampProto(response.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	uapb, err := ptypes.TimestampProto(response.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.{{ .ResourceName  }}{
 		Id:          response.ID,
 		Name:        response.Name,
 		Description: response.Description,
 		CreatedBy:   response.CreatedBy,
 		UpdatedBy:   response.UpdatedBy,
-		CreatedAt:   &timestamp.Timestamp{Seconds: response.CreatedAt},
-		UpdatedAt:   &timestamp.Timestamp{Seconds: response.UpdatedAt},
+		CreatedAt:   capb,
+		UpdatedAt:   uapb,
 	}, nil
 }
 

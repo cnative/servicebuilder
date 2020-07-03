@@ -10,6 +10,7 @@ PROTOC_VERSION={{ .ProtocVersion }}
 GOLANGCI_LINT_VERSION=1.23.8
 CFSSL_VERSION=1.4.1
 SERVICEBUILDER_VERSION=0.9.4
+GOLANG_MIGRATE_VERSION=4.11.0
 
 arch=$(uname -m)
 os=$(uname -s)
@@ -85,6 +86,18 @@ __install_gotools() {
     go install github.com/go-bindata/go-bindata/go-bindata
 }
 
+__install_golang_migrate() {
+    local bin="migrate.${os}-amd64"
+    local asset="${bin}.tar.gz"
+    local url="https://github.com/golang-migrate/migrate/releases/download/v$GOLANG_MIGRATE_VERSION/$asset"
+    echo "Download $url"
+
+    curl -sLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/bin -zxf "${asset}"
+    rm -rf "${asset}"
+    mv "${ROOTDIR}/.tools/bin/$bin" "${ROOTDIR}/.tools/bin/migrate"
+}
+
 rm -rf "$ROOTDIR/.tools"
 mkdir -p "$ROOTDIR/.tools/bin"
 
@@ -95,5 +108,7 @@ __install_golangci_lint
 __install_cfssl
 
 __install_servicebuilder
+
+__install_golang_migrate
 
 __install_gotools

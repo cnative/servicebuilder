@@ -15,6 +15,7 @@ import (
 	"github.com/cnative/pkg/server"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+    _ "github.com/golang-migrate/migrate/database/postgres"
 )
 
 const (
@@ -139,8 +140,8 @@ var (
 		},
 		cli.StringFlag{
 			Name:  "state-store",
-			Usage: "storage driver, currently supported [memory]",
-			Value: "memory",
+			Usage: "storage driver, currently supported [pgsql]",
+			Value: "pgsql",
 		},
 		tlsCertFile,
 		tlsPrivateKeyFile,
@@ -156,7 +157,7 @@ var (
 			cp := &cliParser{ctx: c, withGRPCServer: true, withGateway: true}
 			return serverAction(cp)
 		},
-		Flags: append(serviceFlags, odicFlags...),
+		Flags: append(serviceFlags, append(odicFlags, dbFlags...)...),
 	}
 
 	// ErrMissingTLSInfo TLS connect information not specified

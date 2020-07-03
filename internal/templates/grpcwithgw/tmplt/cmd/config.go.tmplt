@@ -12,7 +12,6 @@ import (
 	"github.com/cnative/pkg/log"
 
 	"{{ .ModuleName }}/internal/state"
-	"{{ .ModuleName }}/internal/state/memory"
 )
 
 type tlsConfig struct {
@@ -24,6 +23,7 @@ type tlsConfig struct {
 
 type serverConfig struct {
 	ocAgent            ocExporterConfig
+	db                 dbConfig
 	tls                tlsConfig
 	debug              bool
 	gPort              uint
@@ -73,6 +73,7 @@ func (c *cliParser) getConfig() (*serverConfig, error) {
 
 	return &serverConfig{
 		ocAgent:            getOCExporterConfigFromCLI(c.ctx, "{{ .Name }}"),
+		db:                 getDBConfig(c.ctx),
 		gPort:              ports["grpc-port"],
 		htPort:             ports["http-port"],
 		dPort:              ports["debug-port"],
@@ -174,8 +175,9 @@ func (c *cliParser) getNamedPorts() (map[string]uint, error) {
 
 func getStateStore(ctx context.Context, logger *log.Logger, o *serverConfig) (store state.Store, err error) {
 	switch o.stateStore {
-	case "memory":
-		store, err = memory.NewStore(memory.Logger(logger), memory.Trace(o.ocAgent.traceEnabled))
+	case "pgsql":
+		logger.Infow("connecting to database", "datasource", fmt.Sprintf("postgres://%s:****@%s:%d/%s?sslmode=disable", o.db.user, o.db.host, o.db.port, o.db.name))
+		store, err = state.NewPostgresStore(logger, fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", o.db.user, o.db.password, o.db.host, o.db.port, o.db.name))
 		if err != nil {
 			return nil, err
 		}
