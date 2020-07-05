@@ -134,7 +134,7 @@ func (s *sqlStore) Get{{ .ResourceName }}(ctx context.Context, id string) (o {{ 
 		return o, status.Error(codes.InvalidArgument, "missing id")
 	}
 
-	const queryGet = "select id, name, descprtion, created_by, created_at, updated_by, updated_at from {{ LowerCase .ResourceName }}s where id=$1"
+	const queryGet = "select id, name, description, created_by, created_at, updated_by, updated_at from {{ LowerCase .ResourceName }}s where id=$1"
 	row := s.db.QueryRowxContext(ctx, queryGet, id)
 	o, err = scan{{ .ResourceName }}(row)
 	if err != nil {
