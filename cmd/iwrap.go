@@ -249,17 +249,9 @@ func parseCommandArgs(c *cobra.Command) (*parameters, error) {
 	}, nil
 }
 
-func getInterfaceMethods(file, interfaceName string) ([]*ast.Field, error) {
-
-	fs := token.NewFileSet()
-	f, err := parser.ParseFile(fs, file, nil, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
-
+func getAllInterfaceMethods(node ast.Node, interfaceName string) []*ast.Field {
 	methods := []*ast.Field{}
-
-	ast.Inspect(f, func(n ast.Node) bool {
+	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.TypeSpec:
 			if x.Name.Name != interfaceName {
@@ -272,14 +264,29 @@ func getInterfaceMethods(file, interfaceName string) ([]*ast.Field, error) {
 			}
 
 			for _, m := range i.Methods.List {
-				methods = append(methods, m)
+				switch x := m.Type.(type) {
+				case *ast.Ident:
+					methods = append(methods, getAllInterfaceMethods(node, x.Name)...)
+				case *ast.FuncType:
+					methods = append(methods, m)
+				}
 			}
 		}
 
 		return true
 	})
+	return methods
+}
 
-	return methods, nil
+func getInterfaceMethodsInFile(file, interfaceName string) ([]*ast.Field, error) {
+
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, file, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return getAllInterfaceMethods(f, interfaceName), nil
 }
 
 func asTemplateMethodsParam(methods []*ast.Field, ignoredMethods []string) []*method {
@@ -337,7 +344,7 @@ func execute(c *cobra.Command, args []string) error {
 		return err
 	}
 
-	methods, err := getInterfaceMethods(params.file, params.interfaceName)
+	methods, err := getInterfaceMethodsInFile(params.file, params.interfaceName)
 	if err != nil {
 		return err
 	}
