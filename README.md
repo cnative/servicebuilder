@@ -53,7 +53,7 @@ export $HOME/bin:$PATH
 
 #### Pre-built binary
 
-The easiest way to get `servicebuilder` is to use one of the [pre-built release](https://github.com/cnative/servicebuider/releases) binaries which are available for OSX, Linux, and Windows on the release page
+The easiest way to get `servicebuilder` is to use one of the [pre-built release](https://github.com/cnative/servicebuilder/releases) binaries which are available for OSX, Linux, and Windows on the release page
 
 ### Building from source
 
@@ -68,5 +68,8 @@ cd servicebuilder
 git remote add upstream git@github.com:cnative/servicebuilder.git
 git remote set-url --push upstream no_push
 
+
+```
+=======
 make install-deptools clean build
 ```
