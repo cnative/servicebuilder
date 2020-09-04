@@ -61,13 +61,13 @@ var DefaultStoreViews = []*view.View{
 }
 
 // newStoreObserver creates a storeObserver
-func newStoreObserver(logger *log.Logger) *storeObserver {
+func newStoreObserver(logger log.Logger) *storeObserver {
 	return &storeObserver{logger: logger}
 }
 
 // storeObserver encapsulates exposing of store specific metrics to Prometheus.
 type storeObserver struct {
-	logger *log.Logger
+	logger log.Logger
 }
 
 // defaultIgnoredMethods are methods which are commonly found on our stores and
