@@ -27,7 +27,7 @@ var (
 
 type sqlStore struct {
 	db         *sqlx.DB
-	logger     *log.Logger
+	logger     log.Logger
 	dataSource string
 }
 
@@ -43,7 +43,7 @@ func scan{{ .ResourceName }}(scanner structScanner) (o {{ .ResourceName }}, err 
 }
 
 // NewPostgresStore returns a postgres sql store
-func NewPostgresStore(logger *log.Logger, ds string) (Store, error) {
+func NewPostgresStore(logger log.Logger, ds string) (Store, error) {
 
 	db, err := sqlx.Connect("postgres", ds)
 	if err != nil {

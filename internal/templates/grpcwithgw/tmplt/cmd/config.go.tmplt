@@ -173,7 +173,7 @@ func (c *cliParser) getNamedPorts() (map[string]uint, error) {
 	return portsMap, nil
 }
 
-func getStateStore(ctx context.Context, logger *log.Logger, o *serverConfig) (store state.Store, err error) {
+func getStateStore(ctx context.Context, logger log.Logger, o *serverConfig) (store state.Store, err error) {
 	switch o.stateStore {
 	case "pgsql":
 		logger.Infow("connecting to database", "datasource", fmt.Sprintf("postgres://%s:****@%s:%d/%s?sslmode=disable", o.db.user, o.db.host, o.db.port, o.db.name))
@@ -187,7 +187,7 @@ func getStateStore(ctx context.Context, logger *log.Logger, o *serverConfig) (st
 	return store, store.Initialize(ctx)
 }
 
-func getRootLogger(name string, c *serverConfig) (*log.Logger, error) {
+func getRootLogger(name string, c *serverConfig) (log.Logger, error) {
 	ll := log.InfoLevel
 	if c.debug {
 		ll = log.DebugLevel

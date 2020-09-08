@@ -16,14 +16,14 @@ import (
 
 type {{ LowerCase .ResourceName  }}Service struct {
 	store  state.Store
-	logger *log.Logger
+	logger log.Logger
 }
 
 // Make sure that {{ LowerCase .ResourceName  }}Service implements the api.{{ .ResourceName  }}SvcServer interface
 var _ api.{{ .ResourceName  }}SvcServer = &{{ LowerCase .ResourceName  }}Service{}
 
 // NewServiceHandler Creates a new {{ LowerCase .ResourceName  }}Service which implements api.{{ .ResourceName  }}SvcServer
-func newServiceHandler(store state.Store, l *log.Logger) *{{ LowerCase .ResourceName  }}Service {
+func newServiceHandler(store state.Store, l log.Logger) *{{ LowerCase .ResourceName  }}Service {
 	if l == nil {
 		l, _ = log.NewNop()
 	}

@@ -24,7 +24,7 @@ type {{ lowerCase $target }}WithMetrics struct {
 }
 
 // {{ $target }}WithMetrics creates a new {{ $target }} with metrics
-func {{ $target }}WithMetrics(toWrap {{ $target }}, logger *log.Logger) {{ $target }} {
+func {{ $target }}WithMetrics(toWrap {{ $target }}, logger log.Logger) {{ $target }} {
 	return &{{ lowerCase $target }}WithMetrics{wrapped{{$target}}: toWrap, observer: new{{ $target }}Observer(logger)}
 }
 
