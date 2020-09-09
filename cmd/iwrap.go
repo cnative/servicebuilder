@@ -124,7 +124,7 @@ func getType(n ast.Expr) string {
 	case *ast.SelectorExpr:
 		return fmt.Sprintf("%s.%s", x.X, x.Sel)
 	case *ast.Ident:
-		return fmt.Sprintf("%s", x.Name)
+		return x.Name
 	case *ast.StarExpr:
 		return fmt.Sprintf("*%s", getType(x.X))
 	case *ast.ArrayType:
