@@ -5,7 +5,7 @@ set -eu
 
 DIR=$(dirname "$0")
 ROOTDIR=$(cd "$DIR/../" && pwd )
-
+GORELEASER_VERSION=0.141.0
 GOLANGCI_LINT_VERSION=1.23.8
 
 os=$(uname -s)
@@ -32,6 +32,18 @@ __install_golangci_lint() {
     rm -rf ${asset}
 }
 
+__install_goreleaser() {
+    local os
+    os="$(uname -s)"
+    local asset="goreleaser_${os}_x86_64.tar.gz"
+    local url="https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/${asset}"
+    echo "Download $url"
+
+    curl -fsLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/bin -zxf "${asset}"
+    rm -rf "${asset}"
+}
+
 __install_gotools() {
     go install golang.org/x/tools/cmd/goimports
     go install github.com/go-bindata/go-bindata/go-bindata
@@ -41,6 +53,8 @@ rm -rf "$ROOTDIR/.tools"
 mkdir -p "$ROOTDIR/.tools/bin"
 
 __install_golangci_lint
+
+__install_goreleaser
 
 __install_gotools
 
