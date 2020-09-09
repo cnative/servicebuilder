@@ -2,12 +2,14 @@ before:
   hooks:
     - go mod download
 builds:
-  - env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - windows
-      - darwin
+- env:
+    - CGO_ENABLED=0
+  goos:
+    - linux
+    - windows
+    - darwin
+  goarch:
+    - amd64
 checksum:
   name_template: '{{ .ProjectName }}_checksums.txt'
 snapshot:
@@ -16,8 +18,11 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+    - '^docs:'
+    - '^test:'
+    - Merge pull request
+    - Merge branch
+
 archives:
   -
     id: servicebuilder
