@@ -38,7 +38,7 @@ func (s *{{ lowerCase $target }}WithMetrics) {{.Name}}({{template "list" .Params
 	{{template "returns" .Returns}} = s.wrapped{{$target}}.{{.Name}}({{template "params" .Params}})
 	{{if isLastReturnError .Returns }}
 		if {{ lastReturnName .Returns }} != nil {
-			stats.Record(ctx, {{ lowerCase $target }}CallErrorCount.M(1)) // Counter to track a wrapped{{$target}} call errors
+			stats.Record(ctx, callErrorCount.M(1)) // Counter to track a wrapped{{$target}} call errors
 		}
 	{{end}}
 
