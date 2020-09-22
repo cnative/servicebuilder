@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cnative/servicebuilder/internal/iwrap"
+	"github.com/iancoleman/strcase"
 	"github.com/spf13/cobra"
 )
 
@@ -34,10 +35,12 @@ type (
 	}
 
 	templateParams struct {
-		PackageName   string
-		InterfaceName string
-		Methods       []*method
-		CustomImports []string
+		PackageName           string
+		InterfaceName         string
+		Methods               []*method
+		CustomImports         []string
+		ServiceBuilderVersion string
+		ReceiverSub           string
 	}
 
 	method struct {
@@ -79,7 +82,10 @@ var (
 			}
 			return returns[l-1].Name
 		},
-		"lowerCase": strings.ToLower,
+		"lowerCase":      strings.ToLower,
+		"snakeCase":      strcase.ToSnake,
+		"camelCase":      strcase.ToCamel,
+		"lowerCamelCase": strcase.ToLowerCamel,
 	}
 
 	iwrapCmd = &cobra.Command{
@@ -355,10 +361,12 @@ func execute(c *cobra.Command, args []string) error {
 	}
 
 	vm := &templateParams{
-		InterfaceName: params.interfaceName,
-		PackageName:   params.packageName,
-		Methods:       asTemplateMethodsParam(methods, params.ignoredMethods),
-		CustomImports: params.customImports,
+		InterfaceName:         params.interfaceName,
+		PackageName:           params.packageName,
+		Methods:               asTemplateMethodsParam(methods, params.ignoredMethods),
+		CustomImports:         params.customImports,
+		ServiceBuilderVersion: versionString(),
+		ReceiverSub:           strings.ToLower(string([]rune(params.interfaceName)[0:1])),
 	}
 
 	for _, t := range tmplts {
@@ -378,7 +386,7 @@ func execute(c *cobra.Command, args []string) error {
 
 		var out io.Writer = os.Stdout
 		if params.outputDir != "-" {
-			fn := fmt.Sprintf("%s%c%s_with_%s.go", params.outputDir, filepath.Separator, strings.ToLower(params.interfaceName), t.Name())
+			fn := fmt.Sprintf("%s%c%s_with_%s.go", params.outputDir, filepath.Separator, strcase.ToSnake(params.interfaceName), t.Name())
 			f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 			if err != nil {
 				return err

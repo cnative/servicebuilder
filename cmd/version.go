@@ -16,10 +16,16 @@ var versionCmd = &cobra.Command{
 $ servicebuilder version 
 	`,
 	Run: func(c *cobra.Command, args []string) {
-		fmt.Printf("%s\n Version:  %s\n Git Commit:  %s\n Go Version:  %s\n OS/Arch:  %s/%s\n Built:  %s\n",
+		fmt.Println(fmt.Sprintf("%s\n Version:  %s\n Git Commit:  %s\n Go Version:  %s\n OS/Arch:  %s/%s\n Built:  %s",
 			rootCmd.Use, version, gitCommit,
-			runtime.Version(), runtime.GOOS, runtime.GOARCH, compiledAt)
+			runtime.Version(), runtime.GOOS, runtime.GOARCH, compiledAt))
 	},
+}
+
+func versionString() string {
+	return fmt.Sprintf("//%s\n// Version:  %s\n// Git Commit:  %s\n// Go Version:  %s\n// OS/Arch:  %s/%s\n// Built:  %s",
+		rootCmd.Use, version, gitCommit,
+		runtime.Version(), runtime.GOOS, runtime.GOARCH, compiledAt)
 }
 
 var (

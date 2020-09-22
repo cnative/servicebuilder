@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/fatih/color v1.9.0
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
+	github.com/iancoleman/strcase v0.1.1
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
