@@ -8,10 +8,11 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cnative/servicebuilder/internal/builder"
-	"github.com/cnative/servicebuilder/internal/templates/grpcwithgw"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/cnative/servicebuilder/internal/builder"
+	"github.com/cnative/servicebuilder/internal/templates/grpcwithgw"
 )
 
 // newCmd represents the new command

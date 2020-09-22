@@ -10,6 +10,8 @@ export V = 0
 export Q = $(if $(filter 1,$V),,@)
 export M = $(shell printf "\033[34;1m▶\033[0m")
 
+export CC = go build -ldflags '$(LD_FLAGS)'
+
 .PHONY: help
 help:
 	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
@@ -31,18 +33,21 @@ gen:
 
 # Build servicebuilder binary
 .PHONY: build
-build: deps gen fmt vet
-	go build -ldflags '$(LD_FLAGS)' -o bin/servicebuilder ./
+build: install-deptools gen fmt vet
+	$(info $(M) building …)
+	$Q $(CC) -o bin/servicebuilder ./
 
 # Run go fmt against code
 .PHONY: fmt
 fmt:
-	go fmt ./...
+	$(info $(M) formatting …)
+	$Q goimports -w -local github.com/cnative/servicebuilder ./cmd ./internal
 
 # Run go vet against code
 .PHONY: vet
-vet:
-	go vet ./...
+vet: ## run go vet on all source files
+	$(info $(M) vetting …)
+	$Q go vet ./...
 
 .PHONY: lint
 lint: ## run golint

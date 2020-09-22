@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cnative/servicebuilder/internal/term"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/cnative/servicebuilder/internal/term"
 )
 
 var (
