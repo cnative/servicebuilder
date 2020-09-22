@@ -5,8 +5,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cnative/servicebuilder/internal/builder"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/cnative/servicebuilder/internal/builder"
 )
 
 //go:generate go-bindata -o ./grpc_service_with_gw.go -pkg grpcwithgw -nometadata -nomemcopy -prefix tmplt tmplt/...

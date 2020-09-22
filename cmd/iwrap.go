@@ -16,9 +16,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cnative/servicebuilder/internal/iwrap"
 	"github.com/iancoleman/strcase"
 	"github.com/spf13/cobra"
+
+	"github.com/cnative/servicebuilder/internal/iwrap"
 )
 
 type (
