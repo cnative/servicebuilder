@@ -30,7 +30,7 @@ type {{ lowerCamelCase $target}}WithTrace struct {
 }
 
 // {{$target}}WithTrace creates a new {{$target}} with trace
-func {{$target}}WithTrace(toWrap  {{$target}}, logger log.Logger) {{$target}} {
+func {{$target}}WithTrace(toWrap  {{$target}}, logger *log.Logger) {{$target}} {
 	component := strings.TrimPrefix(fmt.Sprintf("%T", toWrap), "*")
 	logger.Debugf("{{ $target }} tracing enabled for %v", component)
 	

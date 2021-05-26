@@ -1,18 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
-(
-ROOTDIR=$(dirname $PWD)/..
-GW_THIRDPARTY=$(go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/grpc-ecosystem/grpc-gateway)/third_party/googleapis
-protoc="$ROOTDIR/.tools/bin/protoc -I. -I$ROOTDIR/.tools/include -I$GW_THIRDPARTY"
+cd "$(dirname "$0")/../.."
+ROOTDIR="$(pwd)"
 
-cd $ROOTDIR
+GW_ROOT_DIR="$ROOTDIR/vendor/github.com/grpc-ecosystem/grpc-gateway/v2"
+protoc="$ROOTDIR/.tools/bin/protoc -Iprotos -I$ROOTDIR/.tools/include"
 
-$protoc --go_out=plugins=grpc:$ROOTDIR/pkg/api \
-        --grpc-gateway_out=logtostderr=true,request_context=true:$ROOTDIR/pkg/api \
-        --swagger_out=logtostderr=true:$ROOTDIR/pkg/api \
-        --plugin=protoc-gen-go=$ROOTDIR/.tools/bin/protoc-gen-go \
-        --plugin=protoc-gen-grpc-gateway=$ROOTDIR/.tools/bin/protoc-gen-grpc-gateway \
-        --plugin=protoc-gen-swagger=$ROOTDIR/.tools/bin/protoc-gen-swagger \
-    {{ .Name  }}.proto
-)
+# Admin API
+$protoc --go_out "$ROOTDIR/pkg/api" --go_opt paths=source_relative \
+        --go-grpc_out "$ROOTDIR/pkg/api" --go-grpc_opt paths=source_relative \
+        --grpc-gateway_out "$ROOTDIR/pkg/api" \
+        --grpc-gateway_opt logtostderr=true \
+        --grpc-gateway_opt paths=source_relative \
+        --grpc-gateway_opt generate_unbound_methods=true \
+        --openapiv2_out "$ROOTDIR/pkg/api" --openapiv2_opt logtostderr=true,allow_merge=true,merge_file_name=v1/apidocs,fqn_for_openapi_name=true \
+        --plugin=protoc-gen-go="$ROOTDIR/.tools/bin/protoc-gen-go" \
+        --plugin=protoc-gen-grpc-gateway="$ROOTDIR/.tools/bin/protoc-gen-grpc-gateway" \
+        --plugin=protoc-gen-openapiv2="$ROOTDIR/.tools/bin/protoc-gen-openapiv2" \
+        protos/v1/{{ LowerCase .ResourceName }}.proto

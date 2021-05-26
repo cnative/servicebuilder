@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "./;api";
+
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/api/client.proto";
+import "google/api/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/field_mask.proto";
+
+// Service that manages {{ .ResourceName }} resource
+service {{ .ResourceName }}Svc {
+
+  // Get a specific {{ LowerCase .ResourceName }}
+  rpc Get{{ .ResourceName }}(Get{{ .ResourceName }}Request) returns ({{ .ResourceName }}) {
+    option (google.api.http) = {
+      get : "/v1/{name={{ LCPluralize .ResourceName }}/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // List {{ LowerCase .ResourceName }} resources
+  rpc List{{ Pluralize .ResourceName }}(List{{ Pluralize .ResourceName }}Request) returns (List{{ Pluralize .ResourceName }}Response) {
+    option (google.api.http) = {
+      get : "/v1/{parent={{ LCPluralize .ResourceName }}}"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Create an {{ LowerCase .ResourceName }}
+  rpc Create{{ .ResourceName }}(Create{{ .ResourceName }}Request) returns ({{ .ResourceName }}) {
+    option (google.api.http) = {
+      post : "/v1/{{ LCPluralize .ResourceName }}"
+      body : "{{ LowerCase .ResourceName }}"
+    };
+    option (google.api.method_signature) = "{{ LowerCase .ResourceName }}";
+  }
+
+  // Update an {{ LowerCase .ResourceName }}
+  rpc Update{{ .ResourceName }}(Update{{ .ResourceName }}Request) returns ({{ .ResourceName }}) {
+    option (google.api.http) = {
+      patch : "/v1/{{"{"}}{{ LowerCase .ResourceName }}.name={{ LCPluralize .ResourceName }}/*}"
+      body : "{{ LowerCase .ResourceName }}"
+    };
+    option (google.api.method_signature) = "{{ LowerCase .ResourceName }},update_mask";
+  }
+
+  rpc Delete{{ .ResourceName }}(Delete{{ .ResourceName }}Request) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete : "/v1/{name={{ LCPluralize .ResourceName }}/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+}
+
+// The request structure to fetch an {{ LowerCase .ResourceName }}.
+message Get{{ .ResourceName }}Request {
+  // The name of the {{ LowerCase .ResourceName }} to retrieve.
+  // Format: {{ LCPluralize .ResourceName }}/{{"{"}}{{ LowerCase .ResourceName }}}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).type = "example.com/{{ .ResourceName }}"
+  ];
+}
+
+// The request structure for listing {{ LCPluralize .ResourceName }}.
+message List{{Pluralize  .ResourceName }}Request {
+  // {{ LowerCase .ResourceName }} name.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).child_type = "example.com/{{ .ResourceName }}"
+  ];
+
+  // filter by name.
+  string filter = 2;
+
+  // The maximum number of resources to return. The service may return fewer
+  // than this value. If unspecified, at most 25 resources will be returned. The
+  // maximum value is 1000; values above 1000 will be coerced to 1000.
+  int32 page_size = 11;
+
+  // A page token, received from a previous `List{{ Pluralize .ResourceName }}Request` resources
+  // call. Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `List{{ Pluralize .ResourceName }}Request`
+  // must match the call that provided the page token.
+  string page_token = 12;
+}
+
+// The response structure from listing {{ LCPluralize .ResourceName }}.
+message List{{ Pluralize .ResourceName }}Response {
+  // {{ Pluralize .ResourceName }}.
+  repeated {{ .ResourceName }} {{ LCPluralize .ResourceName }} = 1;
+
+  // A token that can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 11;
+}
+
+// The request structure to create a {{ LowerCase .ResourceName }}.
+message Create{{ .ResourceName }}Request {
+  // The {{ LowerCase .ResourceName }} to create.
+  {{ .ResourceName }} {{ LowerCase .ResourceName }} = 1 [ (google.api.field_behavior) = REQUIRED ];
+}
+
+// The request structure to update {{ LowerCase .ResourceName }} resource.
+message Update{{ .ResourceName }}Request {
+
+  // The {{ LowerCase .ResourceName }} to update.
+  //
+  // The `name` field is used to identify the {{ LowerCase .ResourceName }} to be updated.
+  // Format: {{ LCPluralize .ResourceName }}/{ {{ LowerCase .ResourceName }} }
+  {{ .ResourceName }} {{ LowerCase .ResourceName }} = 1 [ (google.api.field_behavior) = REQUIRED ];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message Delete{{ .ResourceName }}Request {
+  // The name of the publisher to delete.
+  // Format: {{ LCPluralize .ResourceName }}/{ {{ LowerCase .ResourceName }}}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type : "example.com/{{ .ResourceName }}"}
+  ];
+
+  // If set to true, any books from this publisher will also be deleted.
+  // (Otherwise, the request will only work if the publisher has no books.)
+  bool force = 2;
+}
+
+// {{ .ResourceName }} is a resource that is managed.
+message {{ .ResourceName }} {
+  option (google.api.resource) = {
+    type : "example.com/{{ .ResourceName }}"
+    pattern : "{{ LCPluralize .ResourceName }}/{{"{"}}{{ LowerCase .ResourceName }}}"
+  };
+  // Output only. {{ .ResourceName }} id.
+  string id = 1 [ (google.api.field_behavior) = OUTPUT_ONLY ];
+
+  // Name of the {{ LowerCase .ResourceName }}.
+  string name = 2;
+
+  // {{ .ResourceName }} labels. Can be used for selecting {{ LCPluralize .ResourceName }} when listing.
+  map<string, string> labels = 3;
+
+  // Output only. Creator of the {{ LowerCase .ResourceName }}.
+  string creator = 51 [ (google.api.field_behavior) = OUTPUT_ONLY ];
+  // Output only. Time at which the {{ LowerCase .ResourceName }} was created.
+  google.protobuf.Timestamp create_time = 52
+      [ (google.api.field_behavior) = OUTPUT_ONLY ];
+  // Output only. Last updater of the {{ LowerCase .ResourceName }}.
+  string last_updater = 53 [ (google.api.field_behavior) = OUTPUT_ONLY ];
+  // Output only. Time at which the {{ LowerCase .ResourceName }} was last updated.
+  google.protobuf.Timestamp last_update_time = 54
+      [ (google.api.field_behavior) = OUTPUT_ONLY ];
+}

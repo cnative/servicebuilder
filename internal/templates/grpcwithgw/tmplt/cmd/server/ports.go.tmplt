@@ -1,8 +1,7 @@
 package main
 
 const (
-	grpcPort    = 4540 // grpc port
-	gatewayPort = 4541 // gateway port
+	grpcPort = 4540 // grpc port
 
 	// secondary ports on each service
 	metricsPort = 9101 // /metrics that prometheus scrapes

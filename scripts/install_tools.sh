@@ -5,8 +5,8 @@ set -eu
 
 DIR=$(dirname "$0")
 ROOTDIR=$(cd "$DIR/../" && pwd )
-GORELEASER_VERSION=0.141.0
-GOLANGCI_LINT_VERSION=1.23.8
+GORELEASER_VERSION=0.164.0
+GOLANGCI_LINT_VERSION=1.40.1
 
 os=$(uname -s)
 case "$os" in
@@ -46,7 +46,6 @@ __install_goreleaser() {
 
 __install_gotools() {
     go install golang.org/x/tools/cmd/goimports
-    go install github.com/go-bindata/go-bindata/go-bindata
 }
 
 rm -rf "$ROOTDIR/.tools"

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
-    "time"
 
 	"github.com/cnative/pkg/health"
+	"google.golang.org/genproto/protobuf/field_mask"
+
+	"{{ .ModuleName}}/internal/models"
 )
 
-//go:generate servicebuilder iwrap -z -f ./store.go -i Store --output-dir ./ -p state -m "github.com/cnative/pkg/log"
+//go:generate servicebuilder iwrap -z -f ./store.go -i {{ .ResourceName }}Store --output-dir ./ -p state -m "github.com/cnative/pkg/log"
 
 const (
 	// ASC Ascending sort order
@@ -29,133 +31,15 @@ var (
 //SortOrder indicate Sort Order
 type SortOrder int8
 
-// {{ .ResourceName }} resource with crud
-type {{ .ResourceName }} struct {
-	ID          string    `db:"id" json:"id,omitempty"`
-	Name        string    `db:"name" json:"name,omitempty"`
-	Description string    `db:"description" json:"description,omitempty"`
-	CreatedBy   string    `db:"created_by" json:"created_by,omitempty"`
-	UpdatedBy   string    `db:"updated_by" json:"updated_by,omitempty"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at,omitempty"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at,omitempty"`
-}
-
 // Store provides access to data that is required for .
-type Store interface {
+type {{ .ResourceName }}Store interface {
 	Initialize(ctx context.Context) error
 	io.Closer
 	health.Probe
 
-	Create{{ .ResourceName }}(ctx context.Context, r {{ .ResourceName }}) ({{ .ResourceName }}, error)
-	Get{{ .ResourceName }}(ctx context.Context, id string) ({{ .ResourceName }}, error)
-	List{{ .ResourceName }}s(ctx context.Context, listReq ListRequest) ([]{{ .ResourceName }}, error)
-	Update{{ .ResourceName }}(ctx context.Context, r {{ .ResourceName }}) ({{ .ResourceName }}, error)
-	Delete{{ .ResourceName }}(ctx context.Context, id string) error
-}
-
-// ListRequest used for listing
-type ListRequest interface {
-    Name() string
-	SortingOrder() SortOrder
-	SortBy() []string
-	Page() int32
-	PageSize() int32
-}
-
-type listRequest struct {
-    name      string
-	sortBy    []string
-	sortOrder SortOrder
-	pageSize  int32
-	page      int32
-}
-
-// ListOption used for listing
-type ListOption interface {
-	apply(*listRequest)
-}
-type optionFunc func(*listRequest)
-
-func (f optionFunc) apply(s *listRequest) {
-	f(s)
-}
-
-// NewListRequest used for searching
-func NewListRequest(name string, opts ...ListOption) ListRequest {
-	//setup defaults
-	lReq := &listRequest{
-        name:      name,
-		sortBy:    []string{"name"},
-		sortOrder: ASC,
-		page:      1,
-		pageSize:  int32(DefaultPageSize),
-	}
-
-	for _, opt := range opts {
-		opt.apply(lReq)
-	}
-
-	return lReq
-}
-
-func (l *listRequest) Name() string {
-
-	return l.name
-}
-
-func (l *listRequest) SortingOrder() SortOrder {
-
-	return l.sortOrder
-}
-
-func (l *listRequest) SortBy() []string {
-
-	return l.sortBy
-}
-
-func (l *listRequest) Page() int32 {
-	return l.page
-}
-
-func (l *listRequest) PageSize() int32 {
-	return l.pageSize
-}
-
-// SortBy option to set the SortBy columns
-func SortBy(cols ...string) ListOption {
-	return optionFunc(func(l *listRequest) {
-		sortCols := []string{}
-		for _, c := range cols {
-			sortCols = append(sortCols, c)
-		}
-
-		l.sortBy = sortCols
-	})
-}
-
-// SortingOrder option use. ASC / DESC
-func SortingOrder(order SortOrder) ListOption {
-	return optionFunc(func(l *listRequest) {
-		l.sortOrder = order
-	})
-}
-
-// Page option to set the page number
-func Page(page int32) ListOption {
-	return optionFunc(func(l *listRequest) {
-		l.page = page
-		if page < 1 {
-			l.page = 1
-		}
-	})
-}
-
-// PageSize option to set the page number
-func PageSize(pageSize int32) ListOption {
-	return optionFunc(func(l *listRequest) {
-		l.pageSize = pageSize
-		if pageSize < 1 || pageSize > int32(DefaultPageSize) {
-			l.pageSize = int32(DefaultPageSize)
-		}
-	})
+	Create{{ .ResourceName }}(ctx context.Context, r *models.{{ .ResourceName }}) (*models.{{ .ResourceName }}, error)
+	Get{{ .ResourceName }}(ctx context.Context, name string) (*models.{{ .ResourceName }}, error)
+	List{{ Pluralize .ResourceName }}(ctx context.Context, args *models.ListArgs) ([]*models.{{ .ResourceName }}, string, error)
+	Update{{ .ResourceName }}(ctx context.Context, updateMask *field_mask.FieldMask, r *models.{{ .ResourceName }}) (*models.{{ .ResourceName }}, error)
+	Delete{{ .ResourceName }}(ctx context.Context, name string) error
 }

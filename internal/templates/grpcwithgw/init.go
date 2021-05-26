@@ -1,31 +1,36 @@
 package grpcwithgw
 
 import (
+	"embed"
 	"fmt"
+	"path"
 	"strings"
 	"text/template"
 
+	"github.com/gobuffalo/flect"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/cnative/servicebuilder/internal/builder"
 )
 
-//go:generate go-bindata -o ./grpc_service_with_gw.go -pkg grpcwithgw -nometadata -nomemcopy -prefix tmplt tmplt/...
+type grpcServiceTemplateProvider struct {
+	options   *builder.Options
+	templates map[string]*template.Template
+}
 
-type (
-	grpcServiceTemplateProvider struct {
-		options   *builder.Options
-		templates map[string]*template.Template
-	}
-)
+//go:embed tmplt/**
+var assets embed.FS
 
-var (
-	funcs = template.FuncMap{
-		"TitleCase": strings.Title,
-		"LowerCase": strings.ToLower,
-		"Trim":      strings.Trim,
-	}
-)
+var funcs = template.FuncMap{
+	"TitleCase": strings.Title,
+	"LowerCase": strings.ToLower,
+	"UpperCase": strings.ToUpper,
+	"Trim":      strings.Trim,
+	"Pluralize": flect.Pluralize,
+	"LCPluralize": func(s string) string {
+		return flect.Pluralize(strings.ToLower(s))
+	},
+}
 
 // New creates GRPC Service Builder with Gateway Builder
 func New(o *builder.Options) (builder.TemplateProvider, error) {
@@ -40,41 +45,72 @@ func New(o *builder.Options) (builder.TemplateProvider, error) {
 	return s, nil
 }
 
+func walkAssets(fn func(path string, content []byte) error) error {
+	rootDir := "tmplt"
+	dirs, dir := []string{rootDir}, ""
+	for len(dirs) > 0 {
+		dir, dirs = dirs[0], dirs[1:]
+		de, err := assets.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, d := range de {
+			fqn := path.Join(dir, d.Name())
+			if d.IsDir() {
+				dirs = append(dirs, fqn)
+			} else {
+				content, err := assets.ReadFile(fqn)
+				if err != nil {
+					return err
+				}
+				if err := fn(strings.TrimPrefix(fqn, fmt.Sprintf("%s/", rootDir)), content); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (g *grpcServiceTemplateProvider) initialize() error {
 
 	g.templates = make(map[string]*template.Template)
 
-	for k, v := range _bindata {
-		t, err := v()
-		if err != nil {
+	collector := func(pth string, content []byte) error {
+
+		fb := new(strings.Builder)
+		t := template.Must(template.New("file name").Funcs(funcs).Parse(strings.TrimSuffix(pth, ".tmplt")))
+		if err := t.Execute(fb, g.options); err != nil {
 			return err
 		}
-
-		s := string(t.bytes)
-		f := strings.TrimSuffix(k, ".tmplt")
-		tmplt := template.New(f).Funcs(funcs)
-
-		if strings.HasPrefix(k, "helm") {
+		fpath := fb.String()
+		tmplt := template.New(fpath).Funcs(funcs)
+		fmt.Println(fpath)
+		if strings.HasPrefix(fpath, "helm") {
 			if g.options.DeploymentType != builder.HemlChart {
-				continue //ignore required deployment is not helm
+				return nil //ignore required deployment is not helm
 			}
-			f = fmt.Sprintf("deployment%s", strings.TrimPrefix(k, "helm"))
-			tmplt = template.New(f).Funcs(funcs).Delims("[[", "]]")
-		} else if strings.HasPrefix(k, "kustomize") {
+			fpath = fmt.Sprintf("deployments%s", strings.TrimPrefix(fpath, "helm"))
+			tmplt = template.New(fpath).Funcs(funcs).Delims("[[", "]]")
+		} else if strings.HasPrefix(fpath, "kustomize") {
 			if g.options.DeploymentType != builder.K8SManifest {
-				continue //ignore required deployment is not k8s
+				return nil //ignore required deployment is not k8s
 			}
-			f = fmt.Sprintf("deployment%s", strings.TrimPrefix(k, "kustomize"))
+			fpath = fmt.Sprintf("deployments%s", strings.TrimPrefix(fpath, "kustomize"))
 		}
 
-		pt, err := tmplt.Parse(s)
+		pt, err := tmplt.Parse(string(content))
 		if err != nil {
 			return err
 		}
-		if f == "proto" {
-			f = fmt.Sprintf("%s.proto", g.options.Name)
-		}
-		g.templates[f] = pt
+		g.templates[fpath] = pt
+
+		return nil
+	}
+
+	if err := walkAssets(collector); err != nil {
+		return err
 	}
 
 	log.Info("gRPC service with Gateway template provider initialized")

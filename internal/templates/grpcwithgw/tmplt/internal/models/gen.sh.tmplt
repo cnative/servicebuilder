@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+ROOTDIR=$(dirname "$PWD")/..
+protoc="$ROOTDIR/.tools/bin/protoc -I./protos -I$ROOTDIR/.tools/include -I."
+
+cd "$ROOTDIR"
+$protoc --go_out=paths=source_relative:. \
+        --plugin=protoc-gen-go="$ROOTDIR/.tools/bin/protoc-gen-go" \
+        internal/models/models.proto

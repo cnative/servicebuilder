@@ -120,7 +120,10 @@ func (g *serviceBuilder) Generate() error {
 	f := color.GreenString(`
 	cd %s
 	
-	# Download dependent tools. dep, protoc and protoc plugins
+	# track changes locally
+	git init .; git add .; git commit -m 'init'
+
+	# download and install dependent tools. ex. protoc, protoc plugins, et al.
 	make install-deptools
 
 	# build 

@@ -22,14 +22,19 @@ deps:
 	$Q go get -d -v ./...
 	$Q go mod tidy
 
+.PHONY: local-certs
+local-certs: ## generate TLS certs for local development
+	$(info $(M) generating local certs …)
+	$Q sh ./scripts/gen_tls_certs.sh > /dev/null 2>&1
+
 .PHONY: install-deptools
-install-deptools: deps ## install dependent go tools
+install-deptools:  ## install dependent go tools
 	$(info $(M) installing necessary tools …)
 	$Q sh ./scripts/install_tools_check.sh
 
 .PHONY: gen
 gen:
-	$Q go generate ./pkg/api ./internal/state ./db/postgres; $(info $(M) generating grpc api server handler, gateway, swagger and metrics & trace store …)
+	$Q go generate ./pkg/api ./internal/...; $(info $(M) generating grpc api server handler, gateway, swagger and metrics & trace store …)
 
 .PHONY: fmt
 fmt: ## run go fmt on all source files
@@ -44,12 +49,12 @@ vet: ## run go vet on all source files
 .PHONY: lint
 lint: ## run golint
 	$(info $(M) linting …)
-	$Q ./.tools/bin/golangci-lint --verbose run ./... --timeout=5m --modules-download-mode=vendor
+	$Q ./.tools/bin/golangci-lint --verbose run ./... --timeout=5m
 
 .PHONY: build
-build: gen fmt vet  ## build service
+build: install-deptools gen deps fmt vet  ## build service
 	$(info $(M) building executable …)
-	$Q $(CC) -o bin/{{ .Name }} ./cmd
+	$Q $(CC) -o bin/{{ .Name }} ./cmd/server
 
 .PHONY: test
 test: ## run go tests with race detector

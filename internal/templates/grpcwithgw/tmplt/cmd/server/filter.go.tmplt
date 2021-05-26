@@ -1,0 +1,21 @@
+package main
+
+import (
+	"{{ .ModuleName }}/internal/models"
+)
+
+const (
+	defaultPageSize = 25   // number elements in a page to return by default
+	maxPageSize     = 1000 // max results to return
+)
+
+func newListArgs(filter string, pgSz int32, pgToken string) *models.ListArgs {
+
+	if pgSz <= 0 {
+		pgSz = defaultPageSize
+	} else if pgSz > maxPageSize {
+		pgSz = maxPageSize
+	}
+
+	return &models.ListArgs{Filter: filter, PageSize: pgSz, PageToken: pgToken}
+}

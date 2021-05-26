@@ -2,6 +2,8 @@
 bin
 
 .tools
+.certs
+.pgdata
 
 vendor
 

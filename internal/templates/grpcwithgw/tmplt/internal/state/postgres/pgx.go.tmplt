@@ -1,0 +1,661 @@
+package postgres
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"embed"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"time"
+
+	"github.com/cnative/pkg/log"
+	"github.com/golang-migrate/migrate"
+	bindata "github.com/golang-migrate/migrate/source/go_bindata"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jmoiron/sqlx/reflectx"
+	"github.com/pkg/errors"
+	"google.golang.org/genproto/protobuf/field_mask"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	ts "google.golang.org/protobuf/types/known/timestamppb"
+	filter_labels "k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
+
+	"{{ .ModuleName }}/internal/models"
+)
+
+//go:embed migrations/*
+var migrations embed.FS
+
+func assetNames() ([]string, error) {
+	de, err := migrations.ReadDir("migrations")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0)
+	for _, d := range de {
+		names = append(names, d.Name())
+	}
+
+	return names, nil
+}
+
+type pgsqlStore struct {
+	db *pgxpool.Pool
+
+	logger log.Logger
+	mapper *reflectx.Mapper
+
+	trace   bool
+	metrics bool
+}
+
+type scanner interface {
+	Scan(dest ...interface{}) error // use if individual column scanning is needed
+}
+
+type scannerFN func(row scanner) error
+type collectFN func(row scanner) (result, error)
+type colMapperFN func(col string) string
+type colValueMapperFN func(col string, val interface{}) (interface{}, error)
+type colWithTableAliasFN func(col string) string
+
+type eventify interface {
+	ToEvent(op models.Operation) (*models.Event, error)
+}
+
+// labels is name value pair
+type labels map[string]string
+
+func (l labels) Value() (driver.Value, error) {
+	return json.Marshal(l)
+}
+
+func (l labels) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+
+	if !ok {
+		return errors.Errorf("labels: type assertion failed. expect []byte got %T", value)
+	}
+	return json.Unmarshal(b, &l)
+}
+
+// StoreOption interface for store
+type StoreOption interface {
+	apply(*pgsqlStore)
+}
+
+type storeOptionFunc func(*pgsqlStore)
+
+func (f storeOptionFunc) apply(p *pgsqlStore) {
+	f(p)
+}
+
+// Logger configures logger for health service
+func Logger(l log.Logger) StoreOption {
+	return storeOptionFunc(func(p *pgsqlStore) {
+		p.logger = l.NamedLogger("postgres")
+	})
+}
+
+// Trace option that enables trace
+func Trace(enable bool) StoreOption {
+	return storeOptionFunc(func(p *pgsqlStore) {
+		p.trace = enable
+	})
+}
+
+// Metrics option that enables metrics
+func Metrics(enable bool) StoreOption {
+	return storeOptionFunc(func(p *pgsqlStore) {
+		p.metrics = enable
+	})
+}
+
+func newInternalStore(ctx context.Context, db *pgxpool.Pool, options ...StoreOption) *pgsqlStore {
+
+	p := &pgsqlStore{
+		metrics: true,
+		db:      db,
+		mapper:  reflectx.NewMapper("json"), // struct must have json tag
+	}
+
+	for _, opt := range options {
+		opt.apply(p)
+	}
+
+	p.logger = log.NewNop()
+
+	return p
+}
+
+// decodePageToken decodes base64 encode representation of {create_time,id} tuple.
+// The create time is expected as a time.RFC3339Nano string as
+func decodePageToken(pgToken string) (res time.Time, uuid string, err error) {
+	byt, err := base64.StdEncoding.DecodeString(pgToken)
+	if err != nil {
+		return
+	}
+
+	arrStr := strings.Split(string(byt), ",")
+	if len(arrStr) != 2 {
+		err = errors.New("cursor is invalid")
+		return
+	}
+
+	res, err = time.Parse(time.RFC3339Nano, arrStr[0])
+	if err != nil {
+		return
+	}
+	uuid = arrStr[1]
+	return
+}
+
+// encodePageToken. A page token is a base64 encode representation of {create_time,id} tuple.
+// the create time is represented in string format as time.RFC3339Nano
+func encodePageToken(t *ts.Timestamp, id string) string {
+	ti := ""
+	if t != nil {
+		ti = t.AsTime().Format(time.RFC3339Nano)
+	}
+	key := fmt.Sprintf("%s,%s", ti, id)
+	return base64.StdEncoding.EncodeToString([]byte(key))
+}
+
+func persistAsEvent(op models.Operation) func(context.Context, pgx.Tx, interface{}) error {
+	return func(ctx context.Context, tx pgx.Tx, dest interface{}) error {
+		var (
+			evt *models.Event
+			err error
+		)
+		if e, ok := dest.(eventify); !ok {
+			return status.Errorf(codes.Internal, "invalid type. got proto.Message. want %T", dest)
+		} else if evt, err = e.ToEvent(op); err != nil {
+			return err
+		}
+
+		const (
+			queryCreate = `INSERT INTO events(resource_type,operation,payload,creator) VALUES($1,$2,$3,$4)`
+		)
+		rows, err := tx.Query(ctx, queryCreate, evt.ResourceType, evt.Operation, evt.Payload, evt.Creator)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		return nil
+	}
+}
+
+// process begins a database transaction, then calls each fn in fns in turn.
+// If a function errors, the transaction is rolled back and its error
+// is returned. If all functions are succesful, the transaction is committed and the
+// returned error is from tx.Commit.
+func (p *pgsqlStore) process(ctx context.Context, dest interface{}, fns ...func(ctx context.Context, tx pgx.Tx, dest interface{}) error) error {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // does nothing if the Commit below is successful
+
+	for _, fn := range fns {
+		if err := fn(ctx, tx, dest); err != nil {
+			if err == sql.ErrNoRows {
+				err = status.Errorf(codes.NotFound, "%s not found", strings.ToLower(strings.TrimPrefix(fmt.Sprintf("%T", dest), "*models.")))
+			}
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (p *pgsqlStore) queryAndScanTx(ctx context.Context, tx pgx.Tx, scan scannerFN, query string, args ...interface{}) error {
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// the query is expected to return atleast a single row
+	if !rows.Next() {
+		err := rows.Err()
+		if err == nil {
+			err = sql.ErrNoRows
+		}
+		return err
+	}
+
+	return scan(rows)
+}
+
+func (p *pgsqlStore) queryAndScan(ctx context.Context, scan scannerFN, query string, args ...interface{}) error {
+	rows, err := p.db.Query(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// the query is expected to return atleast a single row
+	if !rows.Next() {
+		err := rows.Err()
+		if err == nil {
+			err = sql.ErrNoRows
+		}
+		return err
+	}
+
+	return scan(rows)
+}
+
+type updateRequest struct {
+	query          string                           // the update query to be run
+	args           []interface{}                    // initial args
+	src            interface{}                      // source struct that provides args
+	updateMask     *field_mask.FieldMask            // paths of fields that is being updated
+	allowedFields  []string                         // this restricts what can be updated on the table
+	startIndex     int                              // sub var for sql query of for $x
+	scanner        func(dest interface{}) scannerFN // scans the result back in to a models struct
+	colMapper      colMapperFN                      // maps update column to db column. example tls_config.key -> client_key
+	colValueMapper map[string]colValueMapperFN      // helper to convert the value to required column value type
+}
+
+func (u *updateRequest) getFieldsAndArgs(p *pgsqlStore) (string, []interface{}, error) {
+	i, fos, fields := u.startIndex, []string{}, []string{}
+	for _, p := range u.updateMask.Paths {
+		found := false
+		for _, af := range u.allowedFields {
+			if af == p {
+				found, fields = true, append(fields, p)
+				break
+			}
+		}
+		if !found {
+			return "", nil, status.Errorf(codes.InvalidArgument, "updateMask is invalid got=%q. want one of %q", p, u.allowedFields)
+		}
+	}
+	if len(fields) == 0 {
+		return "", nil, status.Errorf(codes.InvalidArgument, "updateMask is invalid got=%q. want one of %q", u.updateMask.Paths, u.allowedFields)
+	}
+	args := u.args
+	fields = append(fields, "updater")
+
+	rc := reflect.ValueOf(u.src)
+	if err := p.mapper.TraversalsByNameFunc(reflect.TypeOf(u.src), fields, func(i1 int, i2 []int) error {
+		fn := fields[i1]
+		if len(i2) > 0 {
+			fnc := ""
+			if u.colMapper != nil {
+				fnc = u.colMapper(fn)
+			}
+			if fnc == "" {
+				fnc = fn
+			}
+			v := p.mapper.FieldByName(rc, fn)
+			vv := v.Interface()
+			if u.colValueMapper != nil {
+				if fn, ok := u.colValueMapper[fnc]; ok {
+					var err error
+					if vv, err = fn(fnc, vv); err != nil {
+						return err
+					}
+				}
+			}
+			args = append(args, vv)
+
+			fos = append(fos, fmt.Sprintf("%s=$%d", fnc, i))
+			i = i + 1
+		} else {
+			return status.Errorf(codes.FailedPrecondition, "update of %q unsupported", fn)
+		}
+
+		return nil
+	}); err != nil {
+		return "", nil, err
+	}
+
+	fos = append(fos, fmt.Sprintf("update_time=$%d", i))
+	args = append(args, "now()") // last field is expected to be upate_time
+
+	return strings.Join(fos, ","), args, nil
+}
+
+func (u *updateRequest) updater(p *pgsqlStore) (func(ctx context.Context, tx pgx.Tx, dest interface{}) error, error) {
+
+	fields, args, err := u.getFieldsAndArgs(p)
+	if err != nil {
+		return nil, err
+	}
+	qc := fmt.Sprintf(u.query, fields)
+	updater := func(ctx context.Context, tx pgx.Tx, dest interface{}) error {
+		return p.queryAndScanTx(ctx, tx, u.scanner(dest), qc, args...)
+	}
+
+	return updater, nil
+}
+
+type result interface {
+	GetId() string
+	GetCreateTime() *ts.Timestamp
+}
+
+type pagedQueryRequest struct {
+	query               string              // query string
+	args                []interface{}       // default args if any that goes with query
+	pageSize            int32               // number of rows to return
+	pageToken           string              // a base64 encoded string that provides additional query condition to help with paging through result set
+	ascOrder            bool                // sort order
+	filter              string              // filter condition
+	allowedFilterFields []string            // searchable fields
+	appendWhereClause   bool                // if true, query already has where clause
+	colMapper           colMapperFN         // filter column mapper
+	colValueMapper      colValueMapperFN    // filter column value mapper. example string to Time
+	colWithTableAlias   colWithTableAliasFN // given a column name, select the table alias that needs to be applied. This is needed to disambiguate the column names when query contains a join clause from multiple tables with same column name
+}
+
+// default name mapper that converts attributes with dot as json fields
+// which are suitable to be used as column name to query pgsql
+// ex.
+//      name = name
+//		labels.region = labels->>'region'
+//		customer.order.number = customer->'order'->>'number'
+// where labels & customer are defined as json fields
+// labels is a special case where it is treated as name value pairs
+func defaultNameMapper(name string) string {
+	if strings.HasPrefix(name, "labels.") {
+		return fmt.Sprintf("labels->>'%s'", strings.TrimPrefix(name, "labels."))
+	}
+	ss := strings.Split(name, ".")
+	l := len(ss)
+	for i := 1; i < len(ss); i++ {
+		if i == l-1 {
+			ss[i] = fmt.Sprintf("->>'%s'", ss[i])
+		} else {
+			ss[i] = fmt.Sprintf("->'%s'", ss[i])
+		}
+	}
+
+	return strings.Join(ss, "")
+}
+
+func (p pagedQueryRequest) sqlOperator(req filter_labels.Requirement) string {
+	var buffer bytes.Buffer
+	op := req.Operator()
+	switch op {
+	case selection.Equals:
+		buffer.WriteString("=")
+	case selection.NotEquals:
+		buffer.WriteString("!=")
+	case selection.In:
+		buffer.WriteString(" IN ")
+	case selection.NotIn:
+		buffer.WriteString(" NOT IN ")
+	case selection.GreaterThan:
+		buffer.WriteString(">")
+	case selection.LessThan:
+		buffer.WriteString("<")
+	case selection.DoesNotExist:
+		buffer.WriteString(" IS NULL")
+	case selection.Exists:
+		buffer.WriteString(" IS NOT NULL")
+	}
+
+	return buffer.String()
+}
+
+func indexedVals(startIndex int, n int) string {
+	ins := []string{}
+	for i := 0; i < n; i++ {
+		ins = append(ins, fmt.Sprintf("$%d", i+startIndex))
+	}
+
+	return strings.Join(ins, ",")
+}
+
+func (p pagedQueryRequest) sqlValue(req filter_labels.Requirement, valStartIndex int) (string, []interface{}, error) {
+	var buffer bytes.Buffer
+	op, vals, rvals := req.Operator(), req.Values().List(), []interface{}{}
+	switch op {
+	case selection.In, selection.NotIn:
+		buffer.WriteString("(")
+		buffer.WriteString(indexedVals(valStartIndex, len(vals)))
+		buffer.WriteString(")")
+	case selection.Exists, selection.DoesNotExist:
+	default:
+		buffer.WriteString(indexedVals(valStartIndex, len(vals)))
+	}
+	for _, v := range vals {
+		var vv interface{} = v
+		if p.colValueMapper != nil {
+			var err error
+			if vv, err = p.colValueMapper(req.Key(), v); err != nil {
+				return "", nil, err
+			}
+		}
+		rvals = append(rvals, vv)
+	}
+
+	return buffer.String(), rvals, nil
+}
+
+// checks if a field is one of the allowed fields that can be included in the filter.
+// to use json fields specify the top level name in the allowed fields.
+// ex.
+//		"name"         allow  "name"
+//		"labels"       allow  "labels", "labels.cloud", "labels.environment"
+//      "labels.cloud" allow  "labels.cloud.aws" but not labels.environment
+func (p pagedQueryRequest) searchable(field string) bool {
+	for _, f := range p.allowedFilterFields {
+		if f == field {
+			return true
+		}
+		if strings.HasPrefix(field, fmt.Sprintf("%s.", f)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (p pagedQueryRequest) sqlColumn(c string) string {
+	nm := defaultNameMapper
+	if p.colMapper != nil {
+		nm = p.colMapper
+	}
+	rc := nm(c)
+	if p.colWithTableAlias == nil {
+		return rc
+	}
+	return fmt.Sprintf("%s.%s", p.colWithTableAlias(rc), rc)
+}
+
+func (p pagedQueryRequest) queryWithFilter() (string, []interface{}, error) {
+
+	if p.filter == "" {
+		return p.query, p.args, nil
+	}
+
+	rs, err := filter_labels.ParseToRequirements(p.filter)
+	if err != nil {
+		return "", nil, err
+	}
+
+	qr, args, cl := p.query, p.args, []string{}
+	if args == nil {
+		args = make([]interface{}, 0)
+	}
+
+	for _, r := range rs {
+		var buffer bytes.Buffer
+		if !p.searchable(r.Key()) {
+			return "", nil, status.Errorf(codes.InvalidArgument, "%q is unsupported filter field. valid ones are %q", r.Key(), p.allowedFilterFields)
+		}
+
+		buffer.WriteString(p.sqlColumn(r.Key()))
+		buffer.WriteString(p.sqlOperator(r))
+		iv, vals, err := p.sqlValue(r, len(args)+1)
+		if err != nil {
+			return "", nil, err
+		}
+		buffer.WriteString(iv)
+		cl, args = append(cl, buffer.String()), append(args, vals...)
+	}
+	c := strings.Join(cl, " AND ")
+	if p.appendWhereClause {
+		qr = fmt.Sprintf("%s AND %s", qr, c)
+	} else {
+		qr = fmt.Sprintf("%s WHERE %s", qr, c)
+	}
+
+	return qr, args, nil
+}
+
+// pageAndCollect implements paging search results on a table. table must have id and create_time columns.
+// pagedQueryRequest is expected to provide a valid query string to which create time, id filter condition
+// is added to the query. a page token is a base64 encoded {time,id} tuple whose values are appended to the user
+// provided arguments list along with number of rows to fetch to ensure safe sql
+func (p *pgsqlStore) pageAndCollect(ctx context.Context, pgReq pagedQueryRequest, collect collectFN) (nextPageToken string, err error) {
+
+	qr, args, err := pgReq.queryWithFilter()
+	if err != nil {
+		return "", err
+	}
+
+	if pgReq.pageToken != "" {
+		ctime, uuid, errd := decodePageToken(pgReq.pageToken)
+		if errd != nil {
+			return "", status.Error(codes.InvalidArgument, "invalid page token")
+		}
+		args = append(args, ctime, uuid)
+		lindex := len(args)
+
+		andOrWhere := "WHERE"
+		if pgReq.appendWhereClause || pgReq.filter != "" {
+			andOrWhere = "AND"
+		}
+		qr = fmt.Sprintf("%s %s (%s, %s) < ($%d,$%d)", qr, andOrWhere, pgReq.sqlColumn("create_time"), pgReq.sqlColumn("id"), lindex-1, lindex)
+	}
+	args = append(args, pgReq.pageSize+1) // fetch one ahead to determine if need to page for next batch
+	order := "DESC"
+	if pgReq.ascOrder {
+		order = "ASC"
+	}
+	qr = fmt.Sprintf("%s ORDER BY %s %s FETCH FIRST $%d ROWS ONLY", qr, pgReq.sqlColumn("create_time"), order, len(args))
+	var (
+		rows pgx.Rows
+	)
+	rows, err = p.db.Query(ctx, qr, args...)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	i := 0
+	var lastResult result
+	for rows.Next() {
+		if i == int(pgReq.pageSize) && lastResult != nil {
+			nextPageToken = encodePageToken(lastResult.GetCreateTime(), lastResult.GetId())
+			break
+		}
+		lastResult, err = collect(rows)
+		if err != nil {
+			return "", err
+		}
+		i++
+	}
+
+	if rows.Err() != nil {
+		return "", rows.Err()
+	}
+
+	return nextPageToken, nil
+}
+
+func isPGUniqueViolation(err error, constraint string) bool {
+	perr, ok := err.(*pgconn.PgError)
+	return ok && perr.Code == pgerrcode.UniqueViolation && perr.ConstraintName == constraint
+}
+
+func isPGMissingFieldViolation(err error, field string) bool {
+	perr, ok := err.(*pgconn.PgError)
+	return ok && perr.Code == pgerrcode.NotNullViolation && perr.ColumnName == field
+}
+
+func isPGForeignKeyViolation(err error, constraint string) bool {
+	perr, ok := err.(*pgconn.PgError)
+	return ok && perr.Code == pgerrcode.ForeignKeyViolation && perr.ConstraintName == constraint
+}
+
+func (p *pgsqlStore) Close() error {
+	return nil
+}
+
+func (p *pgsqlStore) Healthy() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	conn, err := p.db.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	return conn.Conn().Ping(ctx)
+}
+
+func (p *pgsqlStore) Ready() (bool, error) {
+	return p.db.Stat().TotalConns() > 0, nil
+}
+
+func (p *pgsqlStore) Initialize(ctx context.Context) error {
+	return nil
+}
+
+// MigrateDB performs database migration
+func MigrateDB(ctx context.Context, logger log.Logger, dbURL string) error {
+
+	logger.Info("performing db migrations..")
+
+	assets, err := assetNames()
+	if err != nil {
+		return err
+	}
+	rs := bindata.Resource(assets,
+		func(name string) ([]byte, error) {
+			logger.Debugf("applying... %v", name)
+			return migrations.ReadFile(filepath.Join("migrations", name))
+		})
+
+	d, err := bindata.WithInstance(rs)
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithSourceInstance("migrations", d, dbURL)
+	if err != nil {
+		return err
+	}
+
+	if err = m.Up(); err != nil {
+		if err == migrate.ErrNoChange {
+			logger.Debug("no migrations to apply")
+		} else {
+			return err
+		}
+	}
+
+	logger.Debug("migration completed. closing ..")
+	if serr, derr := m.Close(); serr != nil || derr != nil {
+		return errors.Errorf("source close err=%v database close err=%v", serr, derr)
+	}
+
+	return nil
+}

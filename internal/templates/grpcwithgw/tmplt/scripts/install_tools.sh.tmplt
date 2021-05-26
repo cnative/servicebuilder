@@ -7,10 +7,17 @@ DIR=$(dirname "$0")
 ROOTDIR=$(cd "$DIR/../" && pwd )
 
 PROTOC_VERSION={{ .ProtocVersion }}
-GOLANGCI_LINT_VERSION=1.23.8
-CFSSL_VERSION=1.4.1
-SERVICEBUILDER_VERSION=0.9.7
-GOLANG_MIGRATE_VERSION=4.11.0
+
+KUBECTL_VERSION=1.18.0
+KIND_VERSION=0.11.0
+KUSTOMIZE_VERSION=4.1.2
+GOLANGCI_LINT_VERSION=1.40.1
+CFSSL_VERSION=1.5.0
+SERVICEBUILDER_VERSION=0.9.12
+CONFTEST_VERSION=0.25.0
+GOLANG_MIGRATE_VERSION=4.14.1
+API_LINTER=1.24.0
+GAPIS=1.50.0
 
 arch=$(uname -m)
 os=$(uname -s)
@@ -41,6 +48,34 @@ __install_protoc() {
     rm -rf "$asset"
 }
 
+__install_kubectl() {
+    kubectl_url="https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/${os}/amd64/kubectl"
+    echo "Download $kubectl_url"
+
+    curl -sLJO "$kubectl_url"
+    chmod +x kubectl
+    mv kubectl "$ROOTDIR/.tools/bin"
+}
+
+__install_kind() {
+    kind_url="https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-${os}-amd64"
+    echo "Download $kind_url"
+
+    curl -sLJO "$kind_url"
+    chmod +x "./kind-${os}-amd64"
+    mv "./kind-${os}-amd64" "$ROOTDIR/.tools/bin/kind"
+}
+
+__install_kustomize() {
+    local asset=kustomize_v${KUSTOMIZE_VERSION}_${os}_amd64.tar.gz
+    local kustomize_url=https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/${asset}
+    echo "Download $kustomize_url"
+
+    curl -sLJO ${kustomize_url}
+    tar -C "${ROOTDIR}"/.tools/bin -zxf ${asset}
+    rm -rf ${asset}
+}
+
 __install_golangci_lint() {
     local asset="golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64.tar.gz"
     local url="https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64.tar.gz"
@@ -49,6 +84,18 @@ __install_golangci_lint() {
     curl -fsLJO "$url"
     tar -C "${ROOTDIR}"/.tools/bin --strip-components=1 -zxf ${asset} "golangci-lint-${GOLANGCI_LINT_VERSION}-${os}-amd64/golangci-lint"
     rm -rf ${asset}
+}
+
+__install_opa_conftest() {
+    local os
+    os=$(uname -s)
+    local asset="conftest_${CONFTEST_VERSION}_${os}_x86_64.tar.gz"
+    local url="https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/${asset}"
+    echo "Download $url"
+
+    curl -fsLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/bin -zxf "${asset}" conftest
+    rm -rf "${asset}"
 }
 
 __install_cfssl() {
@@ -77,15 +124,6 @@ __install_servicebuilder() {
     rm -rf "${asset}"
 }
 
-__install_gotools() {
-    go install golang.org/x/tools/cmd/goimports
-    go install github.com/golang/protobuf/protoc-gen-go
-    go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-    go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
-    go install github.com/golang/mock/mockgen
-    go install github.com/go-bindata/go-bindata/go-bindata
-}
-
 __install_golang_migrate() {
     local bin="migrate.${os}-amd64"
     local asset="${bin}.tar.gz"
@@ -98,17 +136,57 @@ __install_golang_migrate() {
     mv "${ROOTDIR}/.tools/bin/$bin" "${ROOTDIR}/.tools/bin/migrate"
 }
 
+__install_gapis_protos() {
+    local asset="${GAPIS}.tar.gz"
+    local url="https://github.com/googleapis/api-common-protos/archive/$asset"
+    echo "Download $url"
+
+    curl -fsLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/include --strip-components=1 -zxf "api-common-protos-${asset}" "api-common-protos-${GAPIS}/google"  
+    rm -rf "api-common-protos-${asset}"
+}
+
+__install_api_linter() {
+    local asset="api-linter-${API_LINTER}-${os}-amd64.tar.gz"
+    local url="https://github.com/googleapis/api-linter/releases/download/v${API_LINTER}/$asset"
+    echo "Download $url"
+
+    curl -fsLJO "$url"
+    tar -C "${ROOTDIR}"/.tools/bin -zxf "${asset}"
+    rm -rf "${asset}"
+}
+
+__install_gotools() {
+    cd "${ROOTDIR}/internal/tools"
+    go install golang.org/x/tools/cmd/goimports
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+	go install google.golang.org/protobuf/cmd/protoc-gen-go
+    go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
+    go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
+    go install github.com/golang/mock/mockgen
+}
+
 rm -rf "$ROOTDIR/.tools"
 mkdir -p "$ROOTDIR/.tools/bin"
 
 __install_protoc
 
+__install_kubectl
+
+__install_kustomize
+
+__install_kind
+
 __install_golangci_lint
 
 __install_cfssl
 
+__install_gotools
+
 __install_servicebuilder
 
-__install_golang_migrate
+__install_opa_conftest
 
-__install_gotools
+__install_gapis_protos
+
+__install_api_linter

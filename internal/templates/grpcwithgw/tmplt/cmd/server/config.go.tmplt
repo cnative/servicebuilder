@@ -6,12 +6,14 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 
 	"github.com/cnative/pkg/log"
 
 	"{{ .ModuleName }}/internal/state"
+	"{{ .ModuleName }}/internal/state/postgres"
 )
 
 type tlsConfig struct {
@@ -23,7 +25,6 @@ type tlsConfig struct {
 
 type serverConfig struct {
 	ocAgent            ocExporterConfig
-	db                 dbConfig
 	tls                tlsConfig
 	debug              bool
 	gPort              uint
@@ -31,9 +32,9 @@ type serverConfig struct {
 	hPort              uint
 	mPort              uint
 	dPort              uint
-	gwPort             uint
 	gwEnabled          bool
 	stateStore         string
+	dbURL              string
 	skipProcessMetrics bool
 	tags               map[string]string
 	rollbarToken       string
@@ -72,16 +73,15 @@ func (c *cliParser) getConfig() (*serverConfig, error) {
 	}
 
 	return &serverConfig{
-		ocAgent:            getOCExporterConfigFromCLI(c.ctx, "{{ .Name }}"),
-		db:                 getDBConfig(c.ctx),
+		ocAgent:            getOCExporterConfigFromCLI(c.ctx, "{{ .ResourceName }}"),
 		gPort:              ports["grpc-port"],
 		htPort:             ports["http-port"],
 		dPort:              ports["debug-port"],
 		hPort:              ports["health-port"],
 		mPort:              ports["metrics-port"],
-		gwPort:             ports["gateway-port"],
 		tls:                tlsConfig,
 		stateStore:         c.ctx.String("state-store"),
+		dbURL:              c.ctx.String("db-url"),
 		debug:              c.ctx.GlobalBool("debug"),
 		gwEnabled:          c.withGateway && !c.ctx.Bool("no-gateway"),
 		skipProcessMetrics: c.ctx.GlobalBool("skip-process-metrics"),
@@ -143,20 +143,6 @@ func (c *cliParser) getNamedPorts() (map[string]uint, error) {
 		portsMap["grpc-port"] = grpcPort
 	}
 
-	// grpc gateway port
-	gwEnabled := !c.ctx.Bool("no-gateway")
-	if c.withGateway && gwEnabled { // not all services support gw and it might be turned off optionally
-		gwPort := c.ctx.Uint("gateway-port")
-		if !isPortValid(gwPort) {
-			return nil, fmt.Errorf("invalid gateway-port number: %d", gwPort)
-		}
-		if s, ok := ports[gwPort]; ok {
-			return nil, errors.Errorf("%v and gateway-port cannot be the same", s)
-		}
-		ports[gwPort] = "gateway-port"
-		portsMap["gateway-port"] = gwPort
-	}
-
 	// http port
 	if c.withHTTPServer {
 		httpPort := c.ctx.Uint("http-port")
@@ -173,21 +159,43 @@ func (c *cliParser) getNamedPorts() (map[string]uint, error) {
 	return portsMap, nil
 }
 
-func getStateStore(ctx context.Context, logger log.Logger, o *serverConfig) (store state.Store, err error) {
+type wrappedDBStore struct {
+	state.{{ .ResourceName }}Store
+	dbPool *pgxpool.Pool
+}
+
+func (w *wrappedDBStore) Close() error {
+	if w != nil && w.dbPool != nil {
+		w.dbPool.Close() // blocks until all connections in pool is closed
+	}
+	return nil
+}
+
+func getStateStore(ctx context.Context, logger log.Logger, o *serverConfig) (store state.{{ .ResourceName }}Store, err error) {
 	switch o.stateStore {
 	case "pgsql":
-		logger.Infow("connecting to database", "datasource", fmt.Sprintf("postgres://%s:****@%s:%d/%s?sslmode=disable", o.db.user, o.db.host, o.db.port, o.db.name))
-		store, err = state.NewPostgresStore(logger, fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", o.db.user, o.db.password, o.db.host, o.db.port, o.db.name))
+		dbPool, err := pgxpool.Connect(ctx, o.dbURL)
 		if err != nil {
 			return nil, err
 		}
+
+		if err := postgres.MigrateDB(ctx, logger, o.dbURL); err != nil {
+			return nil, err
+		}
+
+		store = &wrappedDBStore{
+			{{ .ResourceName }}Store: postgres.New{{ .ResourceName }}Store(ctx, dbPool,
+				postgres.Logger(logger), postgres.Trace(o.ocAgent.traceEnabled)),
+			dbPool: dbPool}
+
 	default:
 		return nil, fmt.Errorf("invalid store: %s", o.stateStore)
 	}
+
 	return store, store.Initialize(ctx)
 }
 
-func getRootLogger(name string, c *serverConfig) (log.Logger, error) {
+func getRootLogger(name string, c *serverConfig) log.Logger {
 	ll := log.InfoLevel
 	if c.debug {
 		ll = log.DebugLevel

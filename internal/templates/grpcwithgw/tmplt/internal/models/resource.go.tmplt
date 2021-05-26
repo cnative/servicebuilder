@@ -1,0 +1,76 @@
+package models
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/gobuffalo/flect"
+)
+
+// Resource represents persistent entities in rocksalt
+type Resource string
+
+// toResourceType returns ResourceType of string k
+func toResourceType(k string) ResourceType {
+	if rk, ok := ResourceType_value[strings.ToUpper(flect.Singularize(k))]; ok {
+		return ResourceType(rk)
+	}
+	return ResourceType_UNKNOWN
+}
+
+// GetType returns resource type
+func (r Resource) GetType() ResourceType {
+	ss := strings.Split(r.String(), "/")
+	l := len(ss)
+	if l%2 == 1 && l > 0 {
+		return toResourceType(ss[l-1])
+	}
+	return toResourceType(ss[l-2])
+}
+
+// GetName returns resource Name
+func (r Resource) GetName() string {
+	ss := strings.Split(r.String(), "/")
+	l := len(ss)
+	if l%2 == 0 && l > 0 {
+		return ss[l-1]
+	}
+	return ""
+}
+
+// GetParent returns resource parent Resource
+func (r Resource) GetParent() Resource {
+	s := r.String()
+	is := strings.Trim(fmt.Sprintf("%s/%s", pluralize(r.GetType()), r.GetName()), "/")
+	return Resource(strings.TrimSuffix(s, is))
+}
+
+func pluralize(k ResourceType) string {
+	s := k.String()
+	if k != ResourceType_UNKNOWN {
+		s = flect.Pluralize(s)
+	}
+	return s
+}
+
+func (r Resource) String() string {
+	ss := strings.Split(strings.Trim(string(r), "/"), "/")
+	rs := []string{}
+	for i := 0; i < len(ss); i = i + 2 {
+		rs = append(rs, pluralize(toResourceType(ss[i])))
+		if i+1 < len(ss) {
+			rs = append(rs, ss[i+1])
+		}
+	}
+	return strings.Join(rs, "/")
+}
+
+// SubResource returns a sub resource with a given type
+func (r Resource) SubResource(k ResourceType, name string) Resource {
+	return Resource(fmt.Sprintf("%s/%s/%s", r.String(), pluralize(k), name))
+}
+
+// FQResource returns a fully qualified resource with a given type
+func FQResource(k ResourceType, name string) Resource {
+	return Resource(fmt.Sprintf("%s/%s", pluralize(k), name))
+}

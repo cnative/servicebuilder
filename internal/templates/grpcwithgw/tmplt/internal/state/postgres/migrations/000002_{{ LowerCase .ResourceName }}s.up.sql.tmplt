@@ -1,0 +1,13 @@
+CREATE TABLE {{ LowerCase .ResourceName }}s
+(
+    id uuid PRIMARY KEY default uuid_generate_v4(),
+    name text UNIQUE NOT NULL,
+    labels jsonb NOT NULL DEFAULT '{}',
+
+    create_time timestamptz NOT NULL default now(),
+    creator text NOT NULL,
+    update_time timestamptz NOT NULL default now(),
+    updater text NOT NULL
+);
+
+CREATE INDEX {{ LowerCase .ResourceName }}s_paging_idx ON {{ LowerCase .ResourceName }}s(create_time DESC, id);

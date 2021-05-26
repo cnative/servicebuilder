@@ -29,11 +29,10 @@
 
 `make install-deptools` will install following dependencies
 
-- [dep](https://golang.github.io/dep/)
-- [Protocol Buffers 3.6.1](https://github.com/protocolbuffers/protobuf) along with following plugins
-    -- [protoc-gen-go](https://github.com/golang/protobuf/tree/master/protoc-gen-go)
+- [Protocol Buffers 3.17.0](https://github.com/protocolbuffers/protobuf) along with following plugins
+    -- [protoc-gen-go](https://github.com/protocolbuffers/protobuf-go/tree/master/cmd/protoc-gen-go)
     -- [protoc-gen-grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway/tree/master/protoc-gen-grpc-gateway)
-    -- [protoc-gen-swagger](https://github.com/grpc-ecosystem/grpc-gateway/tree/master/protoc-gen-swagger)
+    -- [protoc-gen-openapiv2](https://github.com/grpc-ecosystem/grpc-gateway/tree/master/protoc-gen-openapiv2)
 
 `Note:` the `protoc` compiler and the plugins are downloaded and saved to `.protoc` folder under the project's root directory
 

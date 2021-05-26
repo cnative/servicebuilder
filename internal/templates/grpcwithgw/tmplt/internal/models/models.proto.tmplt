@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+option go_package = "{{  .ModuleName }}/internal/models";
+
+package models;
+
+// Resource Types
+enum ResourceType {
+  // Default value. Uknown Resource type
+  UNKNOWN = 0;
+  // {{  .ResourceName }} resource
+  {{  UpperCase .ResourceName }} = 1;
+}
+
+// Operations on a resource
+enum Operation {
+  // Default value. This value is unused.
+  UNSPECIFIED = 0;
+  // Create Operation
+  CREATE = 1;
+  // Replace Operation. Reflects state after update
+  REPLACE = 2;
+  // Delete Opereation
+  DELETE = 3;
+}
+
+// Serialized object representation used for object sync
+message Event {
+  int64 id = 1;
+  ResourceType resource_type = 2;
+  Operation operation = 3;
+  bytes payload = 4;
+
+  string creator = 51;
+  google.protobuf.Timestamp create_time = 52;
+}
+
+// Serialized object representation used for object sync
+message Events { repeated Event events = 1; }
+
+// Event Publisher to represent a process that reads events from a
+// table and publish to a stream and keep track of offset status
+message EventPublisher {
+  int64 id = 1;
+  string name = 2;
+  string stream_name = 3;
+  int64 last_published_offset = 4;
+
+  string creator = 51;
+  google.protobuf.Timestamp create_time = 52;
+  string updater = 53;
+  google.protobuf.Timestamp update_time = 54;
+}
+
+message ListArgs {
+  string filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+// {{  .ResourceName }} Resource
+message {{  .ResourceName }} {
+  string id = 1;
+  string name = 2;
+  map<string, string> labels = 3;
+
+  string creator = 51;
+  google.protobuf.Timestamp create_time = 52;
+  string updater = 53;
+  google.protobuf.Timestamp update_time = 54;
+}
