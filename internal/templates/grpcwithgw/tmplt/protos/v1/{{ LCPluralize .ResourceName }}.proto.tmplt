@@ -122,7 +122,7 @@ message Update{{ .ResourceName }}Request {
 
 message Delete{{ .ResourceName }}Request {
   // The name of the publisher to delete.
-  // Format: {{ LCPluralize .ResourceName }}/{ {{ LowerCase .ResourceName }}}
+  // Format: {{ LCPluralize .ResourceName }}/{{"{"}}{{ LowerCase .ResourceName }}}
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type : "example.com/{{ .ResourceName }}"}

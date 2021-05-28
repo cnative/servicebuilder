@@ -86,7 +86,6 @@ func (g *grpcServiceTemplateProvider) initialize() error {
 		}
 		fpath := fb.String()
 		tmplt := template.New(fpath).Funcs(funcs)
-		fmt.Println(fpath)
 		if strings.HasPrefix(fpath, "helm") {
 			if g.options.DeploymentType != builder.HemlChart {
 				return nil //ignore required deployment is not helm

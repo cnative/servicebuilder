@@ -1,3 +1,24 @@
 package models
 
+import (
+	"google.golang.org/protobuf/proto"
+)
+
 //go:generate /bin/sh ./gen.sh
+
+// ToEvent returns an event representation of {{ LowerCase .ResourceName }} with a given operation
+func (e *{{ .ResourceName }}) ToEvent(op Operation) (*Event, error) {
+
+	var (
+		p   []byte
+		err error
+	)
+	if p, err = proto.Marshal(e); err != nil {
+		return nil, err
+	}
+
+	return &Event{
+		ResourceType: ResourceType_{{ UpperCase .ResourceName }},
+		Operation:    op, Payload: p,
+		Creator: e.Updater}, nil
+}

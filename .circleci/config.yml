@@ -6,7 +6,7 @@ orbs:
 jobs:
   build-and-test:
     docker:
-      - image: circleci/golang:1.15
+      - image: circleci/golang:1.16
     steps:
       - checkout
       - restore_cache:
@@ -47,7 +47,7 @@ jobs:
 
   golangci-lint:
     docker:
-      - image: circleci/golang:1.15
+      - image: circleci/golang:1.16
     steps:
       - attach_workspace:
           at: /home/circleci/project
@@ -62,7 +62,7 @@ jobs:
 
   publish-cli:
     docker:
-      - image: circleci/golang:1.15
+      - image: circleci/golang:1.16
     steps:
       - attach_workspace:
           at: /home/circleci/project

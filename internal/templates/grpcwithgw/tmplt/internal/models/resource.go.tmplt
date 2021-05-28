@@ -48,7 +48,7 @@ func (r Resource) GetParent() Resource {
 func pluralize(k ResourceType) string {
 	s := k.String()
 	if k != ResourceType_UNKNOWN {
-		s = flect.Pluralize(s)
+		s = strings.ToLower(flect.Pluralize(s))
 	}
 	return s
 }

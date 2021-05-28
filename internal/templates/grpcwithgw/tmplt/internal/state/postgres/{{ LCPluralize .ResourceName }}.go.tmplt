@@ -1,0 +1,191 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"google.golang.org/genproto/protobuf/field_mask"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"{{ .ModuleName }}/internal/models"
+	"{{ .ModuleName }}/internal/state"
+)
+
+const (
+	{{ LowerCase .ResourceName }}RetAttrs = `id, name, labels, creator, create_time, updater, update_time`
+)
+
+type {{ LowerCase .ResourceName }}Store struct {
+	*pgsqlStore
+}
+
+func scan{{ .ResourceName }}FN(dest interface{}) scannerFN {
+	c := dest.(*models.{{ .ResourceName }})
+	return func(row scanner) error {
+		lb := make(labels)
+		var ct, ut time.Time
+		if err := row.Scan(&c.Id, &c.Name, &lb, &c.Creator, &ct, &c.Updater, &ut); err != nil {
+			return err
+		}
+		c.Labels, c.CreateTime, c.UpdateTime = lb, timestamppb.New(ct), timestamppb.New(ut)
+
+		return nil
+	}
+}
+
+// New{{ .ResourceName }}Store returns a {{ LowerCase .ResourceName }}Store that is backed by pgsql
+func New{{ .ResourceName }}Store(ctx context.Context, db *pgxpool.Pool, options ...StoreOption) state.{{ .ResourceName }}Store {
+	s := newInternalStore(ctx, db, options...)
+
+	var store state.{{ .ResourceName }}Store = &{{ LowerCase .ResourceName }}Store{s}
+	if s.metrics {
+		store = state.{{ .ResourceName }}StoreWithMetrics(store, s.logger)
+	}
+
+	if s.trace {
+		store = state.{{ .ResourceName }}StoreWithTrace(store, s.logger)
+	}
+
+	return store
+}
+
+func (s *{{ LowerCase .ResourceName }}Store) Create{{ .ResourceName }}(ctx context.Context, r *models.{{ .ResourceName }}) (*models.{{ .ResourceName }}, error) {
+	if r == nil || r.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing {{ LowerCase .ResourceName }} name")
+	}
+	const (
+		queryCreate = `INSERT INTO {{ LowerCase .ResourceName }}s(name, labels, creator, updater) VALUES($1, $2, $3, $4) returning ` + {{ LowerCase .ResourceName }}RetAttrs
+	)
+
+	create{{ .ResourceName }} := func(ctx context.Context, tx pgx.Tx, u interface{}) error {
+		return s.queryAndScanTx(ctx, tx, scan{{ .ResourceName }}FN(u),
+			queryCreate, r.Name, labels(r.Labels), r.Creator, r.Updater)
+	}
+
+	res := &models.{{ .ResourceName }}{}
+	if err := s.process(ctx, res, create{{ .ResourceName }}, persistAsEvent(models.Operation_CREATE)); err != nil {
+		if isPGUniqueViolation(err, "{{ LowerCase .ResourceName }}_name_key") {
+			return nil, status.Errorf(codes.AlreadyExists, "{{ LowerCase .ResourceName }} %q already exists", r.Name)
+		}
+
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (s *{{ LowerCase .ResourceName }}Store) Get{{ .ResourceName }}(ctx context.Context, name string) (*models.{{ .ResourceName }}, error) {
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing {{ LowerCase .ResourceName }} name")
+	}
+
+	const (
+		queryGet = `SELECT %s FROM {{ LowerCase .ResourceName }}s WHERE name LIKE $1`
+	)
+
+	{{ LowerCase .ResourceName }} := &models.{{ .ResourceName }}{}
+	if err := s.queryAndScan(ctx, scan{{ .ResourceName }}FN({{ LowerCase .ResourceName }}), fmt.Sprintf(queryGet, {{ LowerCase .ResourceName }}RetAttrs), name); err != nil {
+		if err == sql.ErrNoRows {
+			err = status.Errorf(codes.NotFound, "%q not found", models.FQResource(models.ResourceType_{{ UpperCase .ResourceName }}, name))
+		}
+		return nil, err
+	}
+
+	return {{ LowerCase .ResourceName }}, nil
+}
+
+func (s *{{ LowerCase .ResourceName }}Store) List{{ Pluralize .ResourceName }}(ctx context.Context, args *models.ListArgs) ([]*models.{{ .ResourceName }}, string, error) {
+	const (
+		queryList = `SELECT %s FROM {{ LowerCase .ResourceName }}s`
+	)
+
+	pg := pagedQueryRequest{query: fmt.Sprintf(queryList, {{ LowerCase .ResourceName }}RetAttrs), pageSize: args.PageSize, pageToken: args.PageToken,
+		allowedFilterFields: []string{"id", "name", "labels"}, filter: args.Filter}
+
+	{{ LowerCase .ResourceName }}s := make([]*models.{{ .ResourceName }}, 0)
+	nextPageToken, err := s.pageAndCollect(ctx, pg, func(row scanner) (result, error) {
+		c := models.{{ .ResourceName }}{}
+		if err := scan{{ .ResourceName }}FN(&c)(row); err != nil {
+			return nil, err
+		}
+		{{ LowerCase .ResourceName }}s = append({{ LowerCase .ResourceName }}s, &c)
+		return &c, nil
+	})
+
+	return {{ LowerCase .ResourceName }}s, nextPageToken, err
+}
+
+func (s *{{ LowerCase .ResourceName }}Store) Update{{ .ResourceName }}(ctx context.Context, updateMask *field_mask.FieldMask, r *models.{{ .ResourceName }}) (*models.{{ .ResourceName }}, error) {
+	if r == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "{{ LowerCase .ResourceName }} is nil")
+	}
+
+	if r.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "{{ LowerCase .ResourceName }} name is empty")
+	}
+
+	if updateMask == nil || len(updateMask.Paths) <= 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "missing update mask while updating {{ LowerCase .ResourceName }} for %q", r.Name)
+	}
+
+	const (
+		queryUpdate = `UPDATE {{ LCPluralize .ResourceName }}
+		SET
+			%s
+		WHERE
+			name=$1
+		returning ` + {{ LowerCase .ResourceName }}RetAttrs
+	)
+
+	updReq := updateRequest{
+		startIndex:    2,
+		query:         queryUpdate,
+		updateMask:    updateMask,
+		src:           r,
+		args:          []interface{}{r.Name},
+		allowedFields: []string{"labels"},
+		scanner:       scan{{ .ResourceName }}FN,
+	}
+
+	set{{ .ResourceName }}Fields, err := updReq.updater(s.pgsqlStore)
+	if err != nil {
+		return nil, err
+	}
+
+	{{ LowerCase .ResourceName }} := &models.{{ .ResourceName }}{}
+	if err := s.process(ctx, {{ LowerCase .ResourceName }}, set{{ .ResourceName }}Fields, persistAsEvent(models.Operation_REPLACE)); err != nil {
+		return nil, err
+	}
+
+	return {{ LowerCase .ResourceName }}, nil
+}
+
+func (s *{{ LowerCase .ResourceName }}Store) Delete{{ .ResourceName }}(ctx context.Context, name string) error {
+	if name == "" {
+		return status.Error(codes.InvalidArgument, "{{ LowerCase .ResourceName }} name is empty")
+	}
+
+	const (
+		queryDelete = `DELETE FROM {{ LCPluralize .ResourceName }} WHERE name=$1 returning ` + {{ LowerCase .ResourceName }}RetAttrs
+	)
+
+	delete{{ .ResourceName }} := func(ctx context.Context, tx pgx.Tx, u interface{}) error {
+		return s.queryAndScanTx(ctx, tx, scan{{ .ResourceName }}FN(u), queryDelete, name)
+	}
+
+	res := &models.{{ .ResourceName }}{}
+	if err := s.process(ctx, res, delete{{ .ResourceName }}, persistAsEvent(models.Operation_DELETE)); err != nil {
+		if err == sql.ErrNoRows {
+			err = status.Errorf(codes.NotFound, "%q not found", models.FQResource(models.ResourceType_{{ UpperCase .ResourceName }}, name))
+		}
+		return err
+	}
+
+	return nil
+}

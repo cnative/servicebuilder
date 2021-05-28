@@ -1,3 +1,4 @@
 export PATH=`pwd`/bin:`pwd`/.tools/bin:$PATH
 export PGDATA=`pwd`/.pgdata
 export DB_URL=postgres://$USER:changemeNow@localhost:5432/local_db?sslmode=disable
+export DEBUG=true

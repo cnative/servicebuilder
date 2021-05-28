@@ -133,7 +133,9 @@ func newInternalStore(ctx context.Context, db *pgxpool.Pool, options ...StoreOpt
 		opt.apply(p)
 	}
 
-	p.logger = log.NewNop()
+	if p.logger == nil {
+		p.logger = log.NewNop()
+	}
 
 	return p
 }
@@ -178,7 +180,7 @@ func persistAsEvent(op models.Operation) func(context.Context, pgx.Tx, interface
 			err error
 		)
 		if e, ok := dest.(eventify); !ok {
-			return status.Errorf(codes.Internal, "invalid type. got proto.Message. want %T", dest)
+			return status.Errorf(codes.Internal, "persistAsEvent::invalid type. want %T to implement ToEvent", dest)
 		} else if evt, err = e.ToEvent(op); err != nil {
 			return err
 		}

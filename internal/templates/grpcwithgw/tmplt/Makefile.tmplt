@@ -51,10 +51,14 @@ lint: ## run golint
 	$(info $(M) linting …)
 	$Q ./.tools/bin/golangci-lint --verbose run ./... --timeout=5m
 
-.PHONY: build
-build: install-deptools gen deps fmt vet  ## build service
-	$(info $(M) building executable …)
+.PHONY: build-server
+build-server:
+	$(info $(M) building server …)
 	$Q $(CC) -o bin/{{ .Name }} ./cmd/server
+
+.PHONY: build
+build: install-deptools gen deps fmt vet build-server ## build service
+	$(info $(M) done.)
 
 .PHONY: test
 test: ## run go tests with race detector
